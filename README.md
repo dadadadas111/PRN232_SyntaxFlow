@@ -1,5 +1,5 @@
 
-## 🧱 **CodeCanvas: Visual Programming with .NET API Backend**
+## 🧱 **SyntaxFlow: Visual Programming with .NET API Backend**
 
 ### 🎯 **Goal**
 
