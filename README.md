@@ -1,0 +1,2 @@
+# PRN232_SyntaxFlow
+CodeCanvas is a visual programming platform that allows users to write code by arranging intuitive drag-and-drop blocks. Built with ASP.NET Core Web API and Google Blockly, the system translates visual block structures into real-world code like Python or JavaScript. With secure JWT-based authentication, CodeCanvas enables interactive learning, safe execution of code (optional), and a scalable backend architecture that reflects modern API design principles.
