@@ -9,14 +9,14 @@
 
 #### ✅ Tasks:
 
-* [ ] Setup **ASP.NET Identity** with **Entity Framework Core** in `API`
-* [ ] Create **ApplicationUser** model in `Models`
-* [ ] Create `IAuthService` and `AuthService` in `Services`
-* [ ] Implement:
+* [x] Setup **ASP.NET Identity** with **Entity Framework Core** in `API`
+* [x] Create **ApplicationUser** model in `Models`
+* [x] Create `IAuthService` and `AuthService` in `Services`
+* [x] Implement:
 
-  * `POST /register`: create user
-  * `POST /login`: authenticate user and issue JWT
-* [ ] Configure **JWT Authentication** in `Program.cs`:
+  * [x] `POST /register`: create user
+  * [x] `POST /login`: authenticate user and issue JWT
+* [x] Configure **JWT Authentication** in `Program.cs`:
 
 ```csharp
 services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -39,13 +39,13 @@ services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 
 #### ✅ Tasks:
 
-* [ ] Create `AuthController`:
+* [x] Create `AuthController`:
 
-  * `/register`
-  * `/login`
-* [ ] Return **JWT Token** with expiry on success
-* [ ] Protect sample endpoint `/translate` with `[Authorize]`
-* [ ] Manual test with Postman:
+  * [x] `/register`
+  * [x] `/login`
+* [x] Return **JWT Token** with expiry on success
+* [x] Protect sample endpoint `/translate` with `[Authorize]`
+* [x] Manual test with Postman:
 
   * Register user
   * Login → get JWT
