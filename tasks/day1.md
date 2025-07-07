@@ -63,14 +63,14 @@ services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 
 #### ✅ Tasks:
 
-* [ ] Create new view: `BlocklyEditor.cshtml`
-* [ ] Add Blockly CDN:
+* [x] Create new view: `BlocklyEditor.cshtml`
+* [x] Add Blockly CDN:
 
 ```html
 <script src="https://unpkg.com/blockly/blockly.min.js"></script>
 ```
 
-* [ ] Add basic layout:
+* [x] Add basic layout:
 
 ```html
 <div id="blocklyDiv" style="height: 400px; width: 100%;"></div>
@@ -78,7 +78,7 @@ services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 <button onclick="exportJson()">Export</button>
 ```
 
-* [ ] Add JS:
+* [x] Add JS:
 
 ```js
 const workspace = Blockly.inject('blocklyDiv', {toolbox: '<xml>...</xml>'});
@@ -101,11 +101,10 @@ function exportJson() {
 
 #### ✅ Tasks:
 
-* [ ] Add simple login form in Razor or popup modal
-* [ ] On login:
-
+* [x] Add simple login form in Razor or popup modal
+* [x] On login:
   * Fetch JWT → save in `localStorage`
-* [ ] Add button to send Blockly JSON to `/translate`:
+* [x] Add button to send Blockly JSON to `/translate`:
 
 ```js
 function sendToApi() {
@@ -124,6 +123,9 @@ function sendToApi() {
     .then(code => document.getElementById("codeDisplay").innerText = code);
 }
 ```
+
+* [x] Add UI/UX for JWT status, error handling, and logout
+* [x] Display API result and errors clearly
 
 #### 🔒 Security Tip:
 

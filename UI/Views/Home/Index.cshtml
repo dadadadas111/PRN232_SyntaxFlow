@@ -1,8 +1,218 @@
 ﻿@{
     ViewData["Title"] = "Home Page";
+    var apiBaseUrl = "https://localhost:7174/";
 }
 
-<div class="text-center">
-    <h1 class="display-4">Welcome</h1>
-    <p>Learn about <a href="https://learn.microsoft.com/aspnet/core">building Web apps with ASP.NET Core</a>.</p>
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2>Blockly Editor</h2>
+        <div>
+            <span id="jwtStatus" class="me-2 text-success" style="display:none;">Logged in</span>
+            <button id="loginBtn" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#loginModal">Login</button>
+            <button id="logoutBtn" class="btn btn-outline-danger btn-sm" style="display:none;">Logout</button>
+        </div>
+    </div>
+    <script src="https://unpkg.com/blockly/blockly.min.js"></script>
+    <div id="blocklyDiv" style="height: 400px; width: 100%;"></div>
+    <pre id="codeDisplay" style="background:#f8f9fa; padding:1em; margin-top:1em; white-space:pre-wrap; word-break:break-all;"></pre>
+    <button onclick="exportJson()" class="btn btn-secondary">Export</button>
+    <button onclick="sendToApi()" class="btn btn-success ms-2">Send to API</button>
+    <button onclick="showCode()" class="btn btn-info ms-2">Show JavaScript</button>
+    <button onclick="runCode()" class="btn btn-warning ms-2">Run JavaScript</button>
+    <span id="apiStatus" class="ms-3"></span>
 </div>
+
+<!-- Login Modal -->
+<div class="modal fade" id="loginModal" tabindex="-1" aria-labelledby="loginModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="loginModalLabel">Login</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <form id="loginForm" onsubmit="return login(event)">
+            <div class="mb-2">
+                <input type="text" id="username" placeholder="Username" class="form-control" required />
+            </div>
+            <div class="mb-2">
+                <input type="password" id="password" placeholder="Password" class="form-control" required />
+            </div>
+            <span id="loginStatus" class="text-danger"></span>
+            <div class="mt-3">
+                <button type="submit" class="btn btn-primary w-100">Login</button>
+            </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+<script>
+const toolbox = `
+<xml>
+  <category name="Logic" colour="210">
+    <block type="controls_if"></block>
+    <block type="logic_compare"></block>
+    <block type="logic_operation"></block>
+    <block type="logic_negate"></block>
+    <block type="logic_boolean"></block>
+    <block type="logic_null"></block>
+    <block type="logic_ternary"></block>
+  </category>
+  <category name="Loops" colour="120">
+    <block type="controls_repeat_ext"></block>
+    <block type="controls_whileUntil"></block>
+    <block type="controls_for"></block>
+    <block type="controls_forEach"></block>
+    <block type="controls_flow_statements"></block>
+  </category>
+  <category name="Math" colour="230">
+    <block type="math_number"></block>
+    <block type="math_arithmetic"></block>
+    <block type="math_single"></block>
+    <block type="math_trig"></block>
+    <block type="math_constant"></block>
+    <block type="math_number_property"></block>
+    <block type="math_round"></block>
+    <block type="math_on_list"></block>
+    <block type="math_modulo"></block>
+    <block type="math_constrain"></block>
+    <block type="math_random_int"></block>
+    <block type="math_random_float"></block>
+  </category>
+  <category name="Text" colour="160">
+    <block type="text"></block>
+    <block type="text_join"></block>
+    <block type="text_append"></block>
+    <block type="text_length"></block>
+    <block type="text_isEmpty"></block>
+    <block type="text_indexOf"></block>
+    <block type="text_charAt"></block>
+    <block type="text_getSubstring"></block>
+    <block type="text_changeCase"></block>
+    <block type="text_trim"></block>
+    <block type="text_print"></block>
+  </category>
+  <category name="Lists" colour="260">
+    <block type="lists_create_with"></block>
+    <block type="lists_repeat"></block>
+    <block type="lists_length"></block>
+    <block type="lists_isEmpty"></block>
+    <block type="lists_indexOf"></block>
+    <block type="lists_getIndex"></block>
+    <block type="lists_setIndex"></block>
+    <block type="lists_getSublist"></block>
+    <block type="lists_split"></block>
+    <block type="lists_sort"></block>
+  </category>
+  <sep></sep>
+  <category name="Variables" colour="330" custom="VARIABLE"></category>
+  <category name="Functions" colour="290" custom="PROCEDURE"></category>
+</xml>
+`;
+
+const workspace = Blockly.inject('blocklyDiv', {toolbox});
+
+function exportJson() {
+    const json = Blockly.serialization.workspaces.save(workspace);
+    document.getElementById("codeDisplay").innerText = JSON.stringify(json, null, 2);
+}
+
+// Use Razor-injected base URL
+var apiBaseUrl = '@apiBaseUrl';
+
+function login(e) {
+    e.preventDefault();
+    const username = document.getElementById("username").value;
+    const password = document.getElementById("password").value;
+    document.getElementById("loginStatus").innerText = "";
+    fetch(apiBaseUrl + "api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password })
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.token) {
+            localStorage.setItem("token", data.token);
+            setJwtStatus(true);
+            var modal = bootstrap.Modal.getInstance(document.getElementById('loginModal'));
+            if (modal) modal.hide();
+            // Remove any lingering modal-backdrop and modal-open class
+            document.querySelectorAll('.modal-backdrop').forEach(el => el.remove());
+            document.body.classList.remove('modal-open');
+            document.body.style = '';
+        } else {
+            document.getElementById("loginStatus").innerText = "Login failed";
+        }
+    })
+    .catch(() => document.getElementById("loginStatus").innerText = "Error");
+    return false;
+}
+
+function setJwtStatus(isLoggedIn) {
+    document.getElementById("jwtStatus").style.display = isLoggedIn ? "inline" : "none";
+    document.getElementById("logoutBtn").style.display = isLoggedIn ? "inline-block" : "none";
+    document.getElementById("loginBtn").style.display = isLoggedIn ? "none" : "inline-block";
+}
+
+document.getElementById("logoutBtn").onclick = function() {
+    localStorage.removeItem("token");
+    setJwtStatus(false);
+};
+
+function checkJwt() {
+    const jwt = localStorage.getItem("token");
+    setJwtStatus(!!jwt);
+}
+
+window.onload = checkJwt;
+
+function sendToApi() {
+    const jwt = localStorage.getItem("token");
+    const json = Blockly.serialization.workspaces.save(workspace);
+    document.getElementById("apiStatus").innerText = "";
+    if (!jwt) {
+        document.getElementById("apiStatus").innerText = "Please login first.";
+        return;
+    }
+    fetch(apiBaseUrl + "api/translate", {
+        method: "POST",
+        headers: {
+            "Authorization": "Bearer " + jwt,
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify(json)
+    })
+    .then(res => {
+        if (!res.ok) throw new Error("API error: " + res.status);
+        return res.text();
+    })
+    .then(code => {
+        document.getElementById("codeDisplay").innerText = code;
+        document.getElementById("apiStatus").innerText = "Success!";
+    })
+    .catch(err => {
+        document.getElementById("apiStatus").innerText = err.message || "API error";
+    });
+}
+
+function showCode() {
+    const code = Blockly.JavaScript.workspaceToCode(workspace);
+    document.getElementById("codeDisplay").innerText = code;
+}
+
+function runCode() {
+    const code = Blockly.JavaScript.workspaceToCode(workspace);
+    try {
+        // eslint-disable-next-line no-eval
+        eval(code);
+    } catch (e) {
+        document.getElementById("codeDisplay").innerText = e.toString();
+    }
+}
+</script>
