@@ -8,30 +8,41 @@
         <h2>Blockly Editor</h2>
         <div>
             <span id="jwtStatus" class="me-2 text-success" style="display:none;">Logged in</span>
-            <button id="loginBtn" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#loginModal">Login</button>
+            <button id="loginBtn" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#authModal">Login</button>
+            <button id="registerBtn" class="btn btn-outline-primary btn-sm ms-1" data-bs-toggle="modal" data-bs-target="#authModal">Register</button>
             <button id="logoutBtn" class="btn btn-outline-danger btn-sm" style="display:none;">Logout</button>
         </div>
     </div>
     <script src="https://unpkg.com/blockly/blockly.min.js"></script>
-    <div id="blocklyDiv" style="height: 400px; width: 100%;"></div>
-    <pre id="codeDisplay" style="background:#f8f9fa; padding:1em; margin-top:1em; white-space:pre-wrap; word-break:break-all;"></pre>
+    <div id="blocklyDiv" style="height: 400px; width: 100%; margin-bottom: 10px"></div>
     <button onclick="exportJson()" class="btn btn-secondary">Export</button>
+    <button onclick="saveBlocky()" class="btn btn-info ms-2">Save Blocky</button>
     <button onclick="sendToApi()" class="btn btn-success ms-2">Send to API</button>
-    <button onclick="showCode()" class="btn btn-info ms-2">Show JavaScript</button>
-    <button onclick="runCode()" class="btn btn-warning ms-2">Run JavaScript</button>
+    <!-- <button onclick="showCode()" class="btn btn-info ms-2">Show JavaScript</button> -->
+    <!-- <button onclick="runCode()" class="btn btn-warning ms-2">Run JavaScript</button> -->
     <span id="apiStatus" class="ms-3"></span>
+    <div style="position:relative;">
+        <pre id="codeDisplay" style="background:#f8f9fa; padding:1em; margin-top:1em; white-space:pre-wrap; word-break:break-all;"></pre>
+        <button id="copyCodeBtn" title="Copy code" style="position:absolute;top:10px;right:10px;z-index:2;background:transparent;border:none;">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="#888" viewBox="0 0 16 16">
+                <rect width="10" height="12" x="3" y="2" rx="2" fill="#eee" stroke="#888" stroke-width="1"/>
+                <rect width="8" height="10" x="4" y="3" rx="1" fill="none" stroke="#888" stroke-width="1"/>
+            </svg>
+        </button>
+    </div>
 </div>
 
-<!-- Login Modal -->
-<div class="modal fade" id="loginModal" tabindex="-1" aria-labelledby="loginModalLabel" aria-hidden="true">
+<!-- Auth Modal (Login/Register) -->
+<div class="modal fade" id="authModal" tabindex="-1" aria-labelledby="authModalLabel" aria-hidden="true">
   <div class="modal-dialog">
     <div class="modal-content">
       <div class="modal-header">
-        <h5 class="modal-title" id="loginModalLabel">Login</h5>
+        <h5 class="modal-title" id="authModalLabel"><span id="authModalTitle">Login</span></h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
       <div class="modal-body">
-        <form id="loginForm" onsubmit="return login(event)">
+        <!-- Login Form -->
+        <form id="loginForm" onsubmit="return login(event)" style="display:block;">
             <div class="mb-2">
                 <input type="text" id="username" placeholder="Username" class="form-control" required />
             </div>
@@ -39,8 +50,26 @@
                 <input type="password" id="password" placeholder="Password" class="form-control" required />
             </div>
             <span id="loginStatus" class="text-danger"></span>
-            <div class="mt-3">
+            <div class="mt-3 d-flex flex-column gap-2">
                 <button type="submit" class="btn btn-primary w-100">Login</button>
+                <button type="button" class="btn btn-link w-100" onclick="showRegister()">Don't have an account? Register</button>
+            </div>
+        </form>
+        <!-- Register Form -->
+        <form id="registerForm" onsubmit="return register(event)" style="display:none;">
+            <div class="mb-2">
+                <input type="text" id="regUsername" placeholder="Username" class="form-control" required />
+            </div>
+            <div class="mb-2">
+                <input type="password" id="regPassword" placeholder="Password" class="form-control" required />
+            </div>
+            <div class="mb-2">
+                <input type="password" id="regConfirmPassword" placeholder="Confirm Password" class="form-control" required />
+            </div>
+            <span id="registerStatus" class="text-danger"></span>
+            <div class="mt-3 d-flex flex-column gap-2">
+                <button type="submit" class="btn btn-primary w-100">Register</button>
+                <button type="button" class="btn btn-link w-100" onclick="showLogin()">Already have an account? Login</button>
             </div>
         </form>
       </div>
@@ -78,9 +107,7 @@ const toolbox = `
     <block type="math_constant"></block>
     <block type="math_number_property"></block>
     <block type="math_round"></block>
-    <block type="math_on_list"></block>
     <block type="math_modulo"></block>
-    <block type="math_constrain"></block>
     <block type="math_random_int"></block>
     <block type="math_random_float"></block>
   </category>
@@ -102,12 +129,12 @@ const toolbox = `
     <block type="lists_repeat"></block>
     <block type="lists_length"></block>
     <block type="lists_isEmpty"></block>
-    <block type="lists_indexOf"></block>
+    @* <block type="lists_indexOf"></block>
     <block type="lists_getIndex"></block>
     <block type="lists_setIndex"></block>
     <block type="lists_getSublist"></block>
     <block type="lists_split"></block>
-    <block type="lists_sort"></block>
+    <block type="lists_sort"></block> *@
   </category>
   <sep></sep>
   <category name="Variables" colour="330" custom="VARIABLE"></category>
@@ -120,6 +147,13 @@ const workspace = Blockly.inject('blocklyDiv', {toolbox});
 function exportJson() {
     const json = Blockly.serialization.workspaces.save(workspace);
     document.getElementById("codeDisplay").innerText = JSON.stringify(json, null, 2);
+}
+
+// Add saveBlocky function as placeholder
+function saveBlocky() {
+    const json = Blockly.serialization.workspaces.save(workspace);
+    // TODO: Implement save logic (e.g., send to API or localStorage)
+    alert('Blocky saved! (placeholder)');
 }
 
 // Use Razor-injected base URL
@@ -140,14 +174,14 @@ function login(e) {
         if (data.token) {
             localStorage.setItem("token", data.token);
             setJwtStatus(true);
-            var modal = bootstrap.Modal.getInstance(document.getElementById('loginModal'));
+            var modal = bootstrap.Modal.getInstance(document.getElementById('authModal'));
             if (modal) modal.hide();
             // Remove any lingering modal-backdrop and modal-open class
             document.querySelectorAll('.modal-backdrop').forEach(el => el.remove());
             document.body.classList.remove('modal-open');
             document.body.style = '';
         } else {
-            document.getElementById("loginStatus").innerText = "Login failed";
+            document.getElementById("loginStatus").innerText = "Invalid username or password.";
         }
     })
     .catch(() => document.getElementById("loginStatus").innerText = "Error");
@@ -214,5 +248,99 @@ function runCode() {
     } catch (e) {
         document.getElementById("codeDisplay").innerText = e.toString();
     }
+}
+
+document.getElementById("copyCodeBtn").onclick = function() {
+    const code = document.getElementById("codeDisplay").innerText;
+    if (navigator.clipboard) {
+        navigator.clipboard.writeText(code);
+    } else {
+        // fallback for old browsers
+        const textarea = document.createElement("textarea");
+        textarea.value = code;
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand("copy");
+        document.body.removeChild(textarea);
+    }
+};
+
+// Auth modal logic
+function showLogin() {
+    document.getElementById('loginForm').style.display = 'block';
+    document.getElementById('registerForm').style.display = 'none';
+    document.getElementById('authModalTitle').innerText = 'Login';
+    document.getElementById('loginStatus').innerText = '';
+    document.getElementById('registerStatus').innerText = '';
+}
+function showRegister() {
+    document.getElementById('loginForm').style.display = 'none';
+    document.getElementById('registerForm').style.display = 'block';
+    document.getElementById('authModalTitle').innerText = 'Register';
+    document.getElementById('loginStatus').innerText = '';
+    document.getElementById('registerStatus').innerText = '';
+}
+// Open modal with correct form
+const loginBtn = document.getElementById('loginBtn');
+if (loginBtn) {
+    loginBtn.setAttribute('data-bs-target', '#authModal');
+    loginBtn.onclick = function() { showLogin(); };
+}
+const registerBtn = document.getElementById('registerBtn');
+if (registerBtn) {
+    registerBtn.setAttribute('data-bs-target', '#authModal');
+    registerBtn.onclick = function() { showRegister(); };
+}
+// Remove old modals from DOM if present
+const oldLoginModal = document.getElementById('loginModal');
+if (oldLoginModal) oldLoginModal.remove();
+const oldRegisterModal = document.getElementById('registerModal');
+if (oldRegisterModal) oldRegisterModal.remove();
+
+// Placeholder register logic
+function register(e) {
+    e.preventDefault();
+    var username = document.getElementById('regUsername').value;
+    var password = document.getElementById('regPassword').value;
+    var confirmPassword = document.getElementById('regConfirmPassword').value;
+    var status = document.getElementById('registerStatus');
+    status.innerText = '';
+    if (password !== confirmPassword) {
+        status.innerText = 'Passwords do not match.';
+        return false;
+    }
+    fetch(apiBaseUrl + "api/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password })
+    })
+    .then(async res => {
+        let data;
+        try { data = await res.json(); } catch { data = {}; }
+        if (!res.ok) {
+            if (Array.isArray(data.errors)) {
+                status.innerHTML = data.errors.map(e => `<div>${e}</div>`).join('');
+            } else {
+                status.innerText = data.message || 'Registration failed.';
+            }
+            return;
+        }
+        if (data.token) {
+            // Registration successful, use token to login
+            localStorage.setItem("token", data.token);
+            setJwtStatus(true);
+            var modal = bootstrap.Modal.getInstance(document.getElementById('authModal'));
+            if (modal) modal.hide();
+            document.querySelectorAll('.modal-backdrop').forEach(el => el.remove());
+            document.body.classList.remove('modal-open');
+            document.body.style = '';
+        } else {
+            status.innerText = data.message || 'Registration failed.';
+        }
+    })
+    .catch(() => {
+        status.innerText = 'Registration error.';
+    });
+    return false;
 }
 </script>

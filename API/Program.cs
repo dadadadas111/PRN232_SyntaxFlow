@@ -16,6 +16,7 @@ builder.Services.AddIdentity<ApplicationUser, IdentityRole>()
     .AddDefaultTokenProviders();
 
 builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddScoped<ICodeTranslator, PythonCodeTranslator>();
 
 builder.Services.AddAuthentication(options =>
 {

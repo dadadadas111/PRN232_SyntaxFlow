@@ -9,18 +9,18 @@
 
 #### ✅ Tasks:
 
-* [ ] Define a clean DTO to represent Blockly JSON:
+* [x] Define a clean DTO to represent Blockly JSON:
 
 ```csharp
 public class BlocklyAstDto
 {
-    public object Blocks { get; set; } // raw JSON AST
+    public JsonElement Blocks { get; set; } // raw JSON AST
 }
 ```
 
-* [ ] (Optional, cleaner) Use a `JObject` or `JsonElement` if structure isn't fixed yet.
+* [x] (Optional, cleaner) Use a `JObject` or `JsonElement` if structure isn't fixed yet.
 
-* [ ] Define translator contract:
+* [x] Define translator contract:
 
 ```csharp
 public interface ICodeTranslator
@@ -29,7 +29,7 @@ public interface ICodeTranslator
 }
 ```
 
-* [ ] Implement placeholder `PythonCodeTranslator` in `Services`
+* [x] Implement placeholder `PythonCodeTranslator` in `Services`
 
 ---
 
@@ -39,29 +39,28 @@ public interface ICodeTranslator
 
 #### ✅ Tasks:
 
-* [ ] Implement recursive translator logic:
+* [x] Implement recursive translator logic:
 
 ```csharp
 public class PythonCodeTranslator : ICodeTranslator
 {
     public string TranslateToPython(BlocklyAstDto ast)
     {
-        // walk AST and output Python code
-        // use switch on block type e.g. "print", "math_arithmetic", etc.
-        // example:
-        // if (block.type == "print") return $"print({innerValue})";
-        return "...";
+        // Production-ready: recursively walk AST and output Python code
+        // Supports: print, math_arithmetic, controls_if, controls_repeat_ext, variables_set
+        // Indentation and helper methods included
+        // ...see Services/PythonCodeTranslator.cs for full implementation...
     }
 }
 ```
 
-* [ ] Make translation readable & maintain indentation
+* [x] Make translation readable & maintain indentation
 
-* [ ] Create helper methods to handle block types:
+* [x] Create helper methods to handle block types:
 
 ```csharp
-string HandleMath(Block block) { ... }
-string HandleLoop(Block block) { ... }
+string HandleMath(JsonElement block) { ... }
+string HandleLoop(JsonElement block) { ... }
 ```
 
 ✅ **Scope only:**
@@ -78,8 +77,8 @@ string HandleLoop(Block block) { ... }
 
 #### ✅ Tasks:
 
-* [ ] Inject translator into `CodeController`
-* [ ] Update `/translate` endpoint:
+* [x] Inject translator into `CodeController`
+* [x] Update `/translate` endpoint:
 
 ```csharp
 [Authorize]
@@ -105,7 +104,7 @@ public IActionResult Translate([FromBody] BlocklyAstDto dto)
 
 #### ✅ Tasks:
 
-* [ ] Update `sendToApi()` JS to:
+* [x] Update `sendToApi()` JS to:
 
   * Call `/translate` with workspace JSON
   * Parse response and display Python code
@@ -128,7 +127,7 @@ function sendToApi() {
 }
 ```
 
-* [ ] Basic error display in case of unauthorized or parse error
+* [x] Basic error display in case of unauthorized or parse error
 
 ✅ **Success Criteria**:
 

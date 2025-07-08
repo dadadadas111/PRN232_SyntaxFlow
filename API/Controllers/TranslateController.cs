@@ -1,26 +1,30 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Models;
+using Services;
 
 namespace API.Controllers
 {
-    [Authorize]
+    // [Authorize]
     [Route("api/[controller]")]
     [ApiController]
     public class TranslateController : ControllerBase
     {
-        [HttpPost]
-        public IActionResult Post([FromBody] object blocklyJson)
+        private readonly ICodeTranslator _translator;
+
+        public TranslateController(ICodeTranslator translator)
         {
-            // For now, just return a mock response
-            return Ok("// Translated code will appear here\n// Received: " + blocklyJson.ToString());
+            _translator = translator;
         }
 
-        [HttpGet]
-        public IActionResult Get()
+        [HttpPost]
+        public IActionResult Post([FromBody] BlocklyAstDto dto)
         {
-            // For now, just return a mock response
-            return Ok("// Translated code will appear here\n// This is a GET request, no Blockly JSON provided.");
+            if (dto == null)
+                return BadRequest("Invalid Blockly AST");
+            var pythonCode = _translator.TranslateToPython(dto);
+            return Ok(pythonCode);
         }
     }
 }
