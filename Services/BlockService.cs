@@ -76,6 +76,7 @@ namespace Services
                     Name = request.Name,
                     Content = request.Content,
                     OwnerId = userId,
+                    IsPublic = request.IsPublic,
                     CreatedAt = DateTime.UtcNow,
                     UpdatedAt = DateTime.UtcNow
                 };
@@ -109,21 +110,35 @@ namespace Services
                 if (block == null)
                     return null;
 
-                // Update block properties
-                block.Name = request.Name;
-                block.Content = request.Content;
+                // Update block properties (only if provided)
+                if (request.Name != null)
+                    block.Name = request.Name;
+                
+                if (request.Content != null)
+                    block.Content = request.Content;
+                    
+                if (request.IsPublic.HasValue)
+                    block.IsPublic = request.IsPublic.Value;
+                    
                 block.UpdatedAt = DateTime.UtcNow;
 
-                // Remove existing tags
-                var existingTags = await _context.BlockTags
-                    .Where(bt => bt.BlockId == blockId)
-                    .ToListAsync();
-                _context.BlockTags.RemoveRange(existingTags);
+                // Handle tags (only if provided)
+                if (request.Tags != null)
+                {
+                    // Remove existing tags
+                    var existingTags = await _context.BlockTags
+                        .Where(bt => bt.BlockId == blockId)
+                        .ToListAsync();
+                    _context.BlockTags.RemoveRange(existingTags);
+                }
 
                 await _context.SaveChangesAsync();
 
-                // Handle new tags
-                await HandleTagsAsync(blockId, request.Tags);
+                // Handle new tags (only if provided)
+                if (request.Tags != null)
+                {
+                    await HandleTagsAsync(blockId, request.Tags);
+                }
 
                 await transaction.CommitAsync();
 

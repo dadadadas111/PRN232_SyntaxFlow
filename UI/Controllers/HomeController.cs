@@ -18,6 +18,22 @@ namespace UI.Controllers
             return View();
         }
 
+        public IActionResult MyBlocks()
+        {
+            return View();
+        }
+
+        public IActionResult BlockDetail(int id)
+        {
+            ViewBag.BlockId = id;
+            return View();
+        }
+
+        public IActionResult SharedBlocks()
+        {
+            return View();
+        }
+
         public IActionResult Privacy()
         {
             return View();
