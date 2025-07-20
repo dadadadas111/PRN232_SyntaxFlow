@@ -38,7 +38,10 @@ namespace Models
         public bool IsPublic { get; set; }
         public int StarCount { get; set; }
         public int ForkCount { get; set; }
+        public int ViewCount { get; set; }
         public int? ForkedFromId { get; set; }
+        public string? ForkedFromName { get; set; } = null; // Name of the original block if this is a fork
+        public string? ForkedFromOwnerName { get; set; } = null; // Owner of the original block if this is a fork
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
         public string[] Tags { get; set; } = Array.Empty<string>();
@@ -54,6 +57,10 @@ namespace Models
         public bool IsPublic { get; set; }
         public int StarCount { get; set; }
         public int ForkCount { get; set; }
+        public int ViewCount { get; set; }
+        public int? ForkedFromId { get; set; }
+        public string? ForkedFromName { get; set; } = null; // Name of the original block if this is a fork
+        public string? ForkedFromOwnerName { get; set; } = null; // Owner of the original block if this is a fork
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
         public string[] Tags { get; set; } = Array.Empty<string>();
@@ -72,5 +79,19 @@ namespace Models
         public string UserId { get; set; } = string.Empty;
         public string UserName { get; set; } = string.Empty;
         public DateTime StarredAt { get; set; }
+    }
+
+    public class ForkBlockRequest
+    {
+        [MaxLength(200)]
+        public string? Name { get; set; } // Optional custom name, defaults to "Fork of {original name}"
+    }
+
+    public class ForkResponse
+    {
+        public int ForkedBlockId { get; set; }
+        public string ForkedBlockName { get; set; } = string.Empty;
+        public int OriginalForkCount { get; set; }
+        public DateTime ForkedAt { get; set; }
     }
 }

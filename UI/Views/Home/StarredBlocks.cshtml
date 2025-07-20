@@ -107,6 +107,15 @@ function displayStarredBlocks(blocks) {
                         <small class="text-muted">
                             <i class="bi bi-person"></i> by ${escapeHtml(block.ownerName)}
                         </small>
+                        ${block.forkedFromId ? `
+                        <div class="mt-1">
+                            <small class="text-success">
+                                <i class="bi bi-arrow-up-right-square"></i> Forked from 
+                                <strong>${escapeHtml(block.forkedFromName)}</strong> 
+                                by ${escapeHtml(block.forkedFromOwnerName)}
+                            </small>
+                        </div>
+                        ` : ''}
                     </div>
                     
                     <div class="mb-2">
@@ -209,8 +218,120 @@ function unstarBlock(blockId) {
 }
 
 function forkBlock(blockId) {
-    // Placeholder for fork functionality (Phase 3)
-    alert('Fork functionality coming in Phase 3!');
+    // Show fork confirmation modal
+    showForkModal(blockId);
+}
+
+function showForkModal(blockId) {
+    // Find block info for modal
+    const block = starredBlocks.find(b => b.id === blockId);
+    if (!block) return;
+    
+    // Create modal HTML
+    const modalHTML = `
+        <div class="modal fade" id="forkModal" tabindex="-1" aria-labelledby="forkModalLabel" aria-hidden="true">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="forkModalLabel">Fork Block</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <p>You are about to fork <strong>"${block.name}"</strong> by ${block.ownerName}.</p>
+                        <div class="mb-3">
+                            <label for="forkName" class="form-label">Fork Name</label>
+                            <input type="text" class="form-control" id="forkName" value="Fork of ${block.name}" maxlength="200">
+                            <div class="form-text">You can customize the name of your fork or keep the default.</div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="button" class="btn btn-primary" onclick="performFork(${blockId})">Create Fork</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // Remove existing modal if any
+    const existingModal = document.getElementById('forkModal');
+    if (existingModal) {
+        existingModal.remove();
+    }
+    
+    // Add modal to body
+    document.body.insertAdjacentHTML('beforeend', modalHTML);
+    
+    // Show modal
+    const modal = new bootstrap.Modal(document.getElementById('forkModal'));
+    modal.show();
+    
+    // Focus on name input
+    document.getElementById('forkName').focus();
+    document.getElementById('forkName').select();
+}
+
+function performFork(blockId) {
+    const forkName = document.getElementById('forkName').value.trim();
+    const forkBtn = document.querySelector('#forkModal .btn-primary');
+    const originalText = forkBtn.innerHTML;
+    
+    // Validate name
+    if (!forkName || forkName.length === 0) {
+        showToast('Fork name cannot be empty', 'error');
+        return;
+    }
+    
+    if (forkName.length > 200) {
+        showToast('Fork name cannot exceed 200 characters', 'error');
+        return;
+    }
+    
+    // Show loading state
+    forkBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Creating Fork...';
+    forkBtn.disabled = true;
+    
+    const requestBody = forkName === `Fork of ${starredBlocks.find(b => b.id === blockId)?.name}` ? {} : { name: forkName };
+    
+    fetch(`${apiBaseUrl}api/blocks/${blockId}/fork`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify(requestBody)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.forkedBlockId) {
+            // Update original block's fork count in UI
+            const blockElement = document.querySelector(`[onclick*="viewBlock(${blockId})"]`).closest('.col-md-6');
+            const forkCountElement = blockElement.querySelector('.bi-arrow-up-right-square').nextSibling;
+            if (forkCountElement) {
+                const currentCount = parseInt(forkCountElement.textContent.trim()) || 0;
+                forkCountElement.textContent = ` ${data.originalForkCount}`;
+            }
+            
+            // Hide modal
+            const modal = bootstrap.Modal.getInstance(document.getElementById('forkModal'));
+            modal.hide();
+            
+            showToast(`Successfully created fork "${data.forkedBlockName}"!`, 'success');
+            
+            // Optionally redirect to the forked block after a delay
+            setTimeout(() => {
+                window.location.href = `/Home/BlockDetail?id=${data.forkedBlockId}`;
+            }, 2000);
+        } else {
+            throw new Error(data.message || 'Failed to create fork');
+        }
+    })
+    .catch(err => {
+        console.error('Error forking block:', err);
+        forkBtn.innerHTML = originalText;
+        forkBtn.disabled = false;
+        showToast(err.message || 'Failed to create fork', 'error');
+    });
 }
 
 function showLoading() {

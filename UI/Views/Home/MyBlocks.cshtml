@@ -92,6 +92,15 @@ function displayBlocks(blocks) {
                     <div class="mb-2">
                         ${block.tags.map(tag => `<span class="badge bg-secondary me-1">${escapeHtml(tag)}</span>`).join('')}
                     </div>
+                    ${block.forkedFromId ? `
+                    <div class="mb-2">
+                        <small class="text-success">
+                            <i class="bi bi-arrow-up-right-square"></i> Forked from 
+                            <strong>${escapeHtml(block.forkedFromName)}</strong> 
+                            by ${escapeHtml(block.forkedFromOwnerName)}
+                        </small>
+                    </div>
+                    ` : ''}
                     <div class="mb-2 text-muted small">
                         <span class="me-3">
                             <i class="bi bi-star"></i> ${block.starCount}

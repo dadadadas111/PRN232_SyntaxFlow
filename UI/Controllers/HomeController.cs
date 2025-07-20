@@ -40,6 +40,11 @@ namespace UI.Controllers
             return View();
         }
 
+        public IActionResult ForkedBlocks()
+        {
+            return View();
+        }
+
         public IActionResult Privacy()
         {
             return View();

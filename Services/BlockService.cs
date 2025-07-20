@@ -25,6 +25,8 @@ namespace Services
         {
             var blocks = await _context.Blocks
                 .Include(b => b.Owner)
+                .Include(b => b.ForkedFrom)
+                .ThenInclude(f => f!.Owner)
                 .Include(b => b.BlockTags)
                 .ThenInclude(bt => bt.Tag)
                 .Where(b => b.OwnerId == userId)
@@ -40,9 +42,13 @@ namespace Services
                 IsPublic = b.IsPublic,
                 StarCount = b.StarCount,
                 ForkCount = b.ForkCount,
+                ViewCount = b.ViewCount,
                 CreatedAt = b.CreatedAt,
                 UpdatedAt = b.UpdatedAt,
-                Tags = b.BlockTags.Select(bt => bt.Tag.Name).ToArray()
+                Tags = b.BlockTags.Select(bt => bt.Tag.Name).ToArray(),
+                ForkedFromId = b.ForkedFromId,
+                ForkedFromName = b.ForkedFrom?.Name,
+                ForkedFromOwnerName = b.ForkedFrom?.Owner?.UserName
             });
         }
 
@@ -50,6 +56,8 @@ namespace Services
         {
             var block = await _context.Blocks
                 .Include(b => b.Owner)
+                .Include(b => b.ForkedFrom)
+                .ThenInclude(f => f!.Owner)
                 .Include(b => b.BlockTags)
                 .ThenInclude(bt => bt.Tag)
                 .FirstOrDefaultAsync(b => b.Id == blockId && b.OwnerId == userId);
@@ -67,7 +75,10 @@ namespace Services
                 IsPublic = block.IsPublic,
                 StarCount = block.StarCount,
                 ForkCount = block.ForkCount,
+                ViewCount = block.ViewCount,
                 ForkedFromId = block.ForkedFromId,
+                ForkedFromName = block.ForkedFrom?.Name,
+                ForkedFromOwnerName = block.ForkedFrom?.Owner?.UserName,
                 CreatedAt = block.CreatedAt,
                 UpdatedAt = block.UpdatedAt,
                 Tags = block.BlockTags.Select(bt => bt.Tag.Name).ToArray()
@@ -162,16 +173,38 @@ namespace Services
 
         public async Task<bool> DeleteBlockAsync(int blockId, string userId)
         {
-            var block = await _context.Blocks
-                .FirstOrDefaultAsync(b => b.Id == blockId && b.OwnerId == userId);
+            using var transaction = await _context.Database.BeginTransactionAsync();
+            try
+            {
+                var block = await _context.Blocks
+                    .FirstOrDefaultAsync(b => b.Id == blockId && b.OwnerId == userId);
 
-            if (block == null)
-                return false;
+                if (block == null)
+                    return false;
 
-            _context.Blocks.Remove(block);
-            await _context.SaveChangesAsync();
+                // Handle forked blocks: set ForkedFromId to null so they become "orphaned"
+                var forkedBlocks = await _context.Blocks
+                    .Where(b => b.ForkedFromId == blockId)
+                    .ToListAsync();
 
-            return true;
+                foreach (var forkedBlock in forkedBlocks)
+                {
+                    forkedBlock.ForkedFromId = null;
+                    forkedBlock.UpdatedAt = DateTime.UtcNow;
+                }
+
+                // Delete the original block
+                _context.Blocks.Remove(block);
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+
+                return true;
+            }
+            catch
+            {
+                await transaction.RollbackAsync();
+                throw;
+            }
         }
 
         private async Task HandleTagsAsync(int blockId, string[] tagNames)
@@ -227,6 +260,8 @@ namespace Services
         {
             var query = _context.Blocks
                 .Include(b => b.Owner)
+                .Include(b => b.ForkedFrom)
+                .ThenInclude(f => f!.Owner)
                 .Include(b => b.BlockTags)
                 .ThenInclude(bt => bt.Tag)
                 .Where(b => b.IsPublic);
@@ -279,10 +314,14 @@ namespace Services
                 IsPublic = b.IsPublic,
                 StarCount = b.StarCount,
                 ForkCount = b.ForkCount,
+                ViewCount = b.ViewCount,
                 CreatedAt = b.CreatedAt,
                 UpdatedAt = b.UpdatedAt,
                 Tags = b.BlockTags.Select(bt => bt.Tag.Name).ToArray(),
-                IsStarredByCurrentUser = starredBlockIds.Contains(b.Id)
+                IsStarredByCurrentUser = starredBlockIds.Contains(b.Id),
+                ForkedFromId = b.ForkedFromId,
+                ForkedFromName = b.ForkedFrom?.Name,
+                ForkedFromOwnerName = b.ForkedFrom?.Owner?.UserName
             });
         }
 
@@ -295,6 +334,8 @@ namespace Services
         {
             var block = await _context.Blocks
                 .Include(b => b.Owner)
+                .Include(b => b.ForkedFrom)
+                .ThenInclude(f => f!.Owner)
                 .Include(b => b.BlockTags)
                 .ThenInclude(bt => bt.Tag)
                 .FirstOrDefaultAsync(b => b.Id == blockId && b.IsPublic);
@@ -318,7 +359,10 @@ namespace Services
                 IsPublic = block.IsPublic,
                 StarCount = block.StarCount,
                 ForkCount = block.ForkCount,
+                ViewCount = block.ViewCount,
                 ForkedFromId = block.ForkedFromId,
+                ForkedFromName = block.ForkedFrom?.Name,
+                ForkedFromOwnerName = block.ForkedFrom?.Owner?.UserName,
                 CreatedAt = block.CreatedAt,
                 UpdatedAt = block.UpdatedAt,
                 Tags = block.BlockTags.Select(bt => bt.Tag.Name).ToArray(),
@@ -445,6 +489,9 @@ namespace Services
                 .Include(bs => bs.Block)
                 .ThenInclude(b => b.Owner)
                 .Include(bs => bs.Block)
+                .ThenInclude(b => b.ForkedFrom)
+                .ThenInclude(f => f!.Owner)
+                .Include(bs => bs.Block)
                 .ThenInclude(b => b.BlockTags)
                 .ThenInclude(bt => bt.Tag)
                 .Where(bs => bs.UserId == userId)
@@ -461,10 +508,14 @@ namespace Services
                 IsPublic = b.IsPublic,
                 StarCount = b.StarCount,
                 ForkCount = b.ForkCount,
+                ViewCount = b.ViewCount,
                 CreatedAt = b.CreatedAt,
                 UpdatedAt = b.UpdatedAt,
                 Tags = b.BlockTags.Select(bt => bt.Tag.Name).ToArray(),
-                IsStarredByCurrentUser = true // Always true for starred blocks list
+                IsStarredByCurrentUser = true, // Always true for starred blocks list
+                ForkedFromId = b.ForkedFromId,
+                ForkedFromName = b.ForkedFrom?.Name,
+                ForkedFromOwnerName = b.ForkedFrom?.Owner?.UserName
             });
         }
 
@@ -489,6 +540,234 @@ namespace Services
                 UserName = bs.User.UserName ?? "",
                 StarredAt = bs.CreatedAt
             });
+        }
+
+        // Fork system methods
+        public async Task<ForkResponse> ForkBlockAsync(int blockId, string userId, string? customName = null)
+        {
+            using var transaction = await _context.Database.BeginTransactionAsync();
+            try
+            {
+                // Get the original block
+                var originalBlock = await _context.Blocks
+                    .Include(b => b.BlockTags)
+                    .ThenInclude(bt => bt.Tag)
+                    .FirstOrDefaultAsync(b => b.Id == blockId);
+
+                if (originalBlock == null)
+                    throw new InvalidOperationException("Block not found");
+
+                // Validate: users can fork public blocks and their own blocks
+                if (!originalBlock.IsPublic && originalBlock.OwnerId != userId)
+                    throw new UnauthorizedAccessException("You can only fork public blocks or your own blocks");
+
+                // Create the fork name
+                var forkName = !string.IsNullOrWhiteSpace(customName) 
+                    ? customName.Trim() 
+                    : $"Fork of {originalBlock.Name}";
+
+                // Create the forked block
+                var forkedBlock = new Block
+                {
+                    Name = forkName,
+                    Content = originalBlock.Content, // Copy the content
+                    OwnerId = userId,
+                    IsPublic = false, // Forks start as private
+                    StarCount = 0, // Reset counts
+                    ForkCount = 0,
+                    ForkedFromId = blockId,
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow
+                };
+
+                _context.Blocks.Add(forkedBlock);
+                await _context.SaveChangesAsync();
+
+                // Copy tags from original block
+                foreach (var blockTag in originalBlock.BlockTags)
+                {
+                    var newBlockTag = new BlockTag
+                    {
+                        BlockId = forkedBlock.Id,
+                        TagId = blockTag.TagId,
+                        CreatedAt = DateTime.UtcNow
+                    };
+                    _context.BlockTags.Add(newBlockTag);
+                }
+
+                // Increment original block's fork count
+                originalBlock.ForkCount++;
+                originalBlock.UpdatedAt = DateTime.UtcNow;
+
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+
+                return new ForkResponse
+                {
+                    ForkedBlockId = forkedBlock.Id,
+                    ForkedBlockName = forkedBlock.Name,
+                    OriginalForkCount = originalBlock.ForkCount,
+                    ForkedAt = forkedBlock.CreatedAt
+                };
+            }
+            catch
+            {
+                await transaction.RollbackAsync();
+                throw;
+            }
+        }
+
+        public async Task<IEnumerable<BlockListResponse>> GetBlockForksAsync(int blockId)
+        {
+            // Check if the original block exists and is public (or user owns it)
+            var originalBlock = await _context.Blocks
+                .FirstOrDefaultAsync(b => b.Id == blockId);
+
+            if (originalBlock == null)
+                throw new InvalidOperationException("Block not found");
+
+            var forks = await _context.Blocks
+                .Include(b => b.Owner)
+                .Include(b => b.BlockTags)
+                .ThenInclude(bt => bt.Tag)
+                .Where(b => b.ForkedFromId == blockId)
+                .OrderByDescending(b => b.CreatedAt)
+                .ToListAsync();
+
+            return forks.Select(b => new BlockListResponse
+            {
+                Id = b.Id,
+                Name = b.Name,
+                OwnerId = b.OwnerId,
+                OwnerName = b.Owner.UserName ?? "",
+                IsPublic = b.IsPublic,
+                StarCount = b.StarCount,
+                ForkCount = b.ForkCount,
+                ViewCount = b.ViewCount,
+                CreatedAt = b.CreatedAt,
+                UpdatedAt = b.UpdatedAt,
+                Tags = b.BlockTags.Select(bt => bt.Tag.Name).ToArray()
+            });
+        }
+
+        public async Task<IEnumerable<BlockListResponse>> GetForkedBlocksAsync(string userId)
+        {
+            var forkedBlocks = await _context.Blocks
+                .Include(b => b.Owner)
+                .Include(b => b.ForkedFrom)
+                .ThenInclude(f => f!.Owner)
+                .Include(b => b.BlockTags)
+                .ThenInclude(bt => bt.Tag)
+                .Where(b => b.OwnerId == userId && b.ForkedFromId != null)
+                .OrderByDescending(b => b.CreatedAt)
+                .ToListAsync();
+
+            return forkedBlocks.Select(b => new BlockListResponse
+            {
+                Id = b.Id,
+                Name = b.Name,
+                OwnerId = b.OwnerId,
+                OwnerName = b.Owner.UserName ?? "",
+                IsPublic = b.IsPublic,
+                StarCount = b.StarCount,
+                ForkCount = b.ForkCount,
+                ViewCount = b.ViewCount,
+                CreatedAt = b.CreatedAt,
+                UpdatedAt = b.UpdatedAt,
+                Tags = b.BlockTags.Select(bt => bt.Tag.Name).ToArray(),
+                ForkedFromId = b.ForkedFromId,
+                ForkedFromName = b.ForkedFrom?.Name,
+                ForkedFromOwnerName = b.ForkedFrom?.Owner?.UserName
+            });
+        }
+
+        // Enhanced block management methods
+        public async Task<IEnumerable<BlockListResponse>> GetTrendingBlocksAsync(int days = 7, int page = 1, int size = 10)
+        {
+            var cutoffDate = DateTime.UtcNow.AddDays(-days);
+            
+            // Get public blocks with recent activity
+            var trendingBlocks = await _context.Blocks
+                .Include(b => b.Owner)
+                .Include(b => b.ForkedFrom)
+                .ThenInclude(f => f!.Owner)
+                .Include(b => b.BlockTags)
+                .ThenInclude(bt => bt.Tag)
+                .Where(b => b.IsPublic)
+                .Select(b => new
+                {
+                    Block = b,
+                    // Calculate trending score: recent stars + recent forks + recent views, weighted by recency
+                    RecentStars = b.Stars.Count(s => s.CreatedAt >= cutoffDate),
+                    RecentForks = b.Forks.Count(f => f.CreatedAt >= cutoffDate),
+                    RecentViews = b.Views.Count(v => v.ViewedAt >= cutoffDate),
+                    TotalActivity = b.StarCount + b.ForkCount + (b.ViewCount / 10), // Weight views less heavily
+                    DaysSinceUpdate = EF.Functions.DateDiffDay(b.UpdatedAt, DateTime.UtcNow)
+                })
+                .OrderByDescending(x => 
+                    (x.RecentStars * 3 + x.RecentForks * 2 + x.RecentViews * 0.1) / Math.Max(1, x.DaysSinceUpdate + 1) + 
+                    x.TotalActivity * 0.1) // Boost for overall popularity
+                .Skip((page - 1) * size)
+                .Take(size)
+                .ToListAsync();
+
+            return trendingBlocks.Select(x => new BlockListResponse
+            {
+                Id = x.Block.Id,
+                Name = x.Block.Name,
+                OwnerId = x.Block.OwnerId,
+                OwnerName = x.Block.Owner.UserName ?? "",
+                IsPublic = x.Block.IsPublic,
+                StarCount = x.Block.StarCount,
+                ForkCount = x.Block.ForkCount,
+                ViewCount = x.Block.ViewCount,
+                CreatedAt = x.Block.CreatedAt,
+                UpdatedAt = x.Block.UpdatedAt,
+                Tags = x.Block.BlockTags.Select(bt => bt.Tag.Name).ToArray(),
+                ForkedFromId = x.Block.ForkedFromId,
+                ForkedFromName = x.Block.ForkedFrom?.Name,
+                ForkedFromOwnerName = x.Block.ForkedFrom?.Owner?.UserName
+            });
+        }
+
+        public async Task TrackBlockViewAsync(int blockId, string? userId = null, string? ipAddress = null)
+        {
+            // Check if block exists and is public (or user owns it)
+            var block = await _context.Blocks
+                .FirstOrDefaultAsync(b => b.Id == blockId && (b.IsPublic || b.OwnerId == userId));
+
+            if (block == null)
+                return; // Don't track views for non-existent or private blocks
+
+            // Use provided IP address or default
+            ipAddress ??= "127.0.0.1";
+
+            // Check if this user/IP has viewed this block recently (within last hour to prevent spam)
+            var recentView = await _context.BlockViews
+                .AnyAsync(v => v.BlockId == blockId && 
+                    ((userId != null && v.UserId == userId) || 
+                     (userId == null && v.IpAddress == ipAddress)) &&
+                    v.ViewedAt >= DateTime.UtcNow.AddHours(-1));
+
+            if (recentView)
+                return; // Don't count duplicate views within an hour
+
+            // Create new view record
+            var blockView = new BlockView
+            {
+                BlockId = blockId,
+                UserId = userId,
+                IpAddress = ipAddress,
+                ViewedAt = DateTime.UtcNow
+            };
+
+            _context.BlockViews.Add(blockView);
+
+            // Increment view count on block
+            block.ViewCount++;
+            block.UpdatedAt = DateTime.UtcNow;
+
+            await _context.SaveChangesAsync();
         }
     }
 }

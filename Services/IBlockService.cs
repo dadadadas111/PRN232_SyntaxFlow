@@ -21,5 +21,14 @@ namespace Services
         Task<StarResponse> UnstarBlockAsync(int blockId, string userId);
         Task<IEnumerable<BlockListResponse>> GetStarredBlocksAsync(string userId);
         Task<IEnumerable<StarUserResponse>> GetBlockStarsAsync(int blockId);
+        
+        // Fork system methods
+        Task<ForkResponse> ForkBlockAsync(int blockId, string userId, string? customName = null);
+        Task<IEnumerable<BlockListResponse>> GetBlockForksAsync(int blockId);
+        Task<IEnumerable<BlockListResponse>> GetForkedBlocksAsync(string userId);
+        
+        // Enhanced block management methods
+        Task<IEnumerable<BlockListResponse>> GetTrendingBlocksAsync(int days = 7, int page = 1, int size = 10);
+        Task TrackBlockViewAsync(int blockId, string? userId = null, string? ipAddress = null);
     }
 }

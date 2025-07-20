@@ -27,6 +27,8 @@ namespace Models
 
         public int ForkCount { get; set; } = 0; // For future fork functionality
 
+        public int ViewCount { get; set; } = 0; // Track total views
+
         public int? ForkedFromId { get; set; } // Reference to original block if this is a fork
 
         [ForeignKey("ForkedFromId")]
@@ -40,5 +42,6 @@ namespace Models
         public virtual ICollection<BlockTag> BlockTags { get; set; } = new List<BlockTag>();
         public virtual ICollection<Block> Forks { get; set; } = new List<Block>(); // Blocks forked from this one
         public virtual ICollection<BlockStar> Stars { get; set; } = new List<BlockStar>(); // Users who starred this block
+        public virtual ICollection<BlockView> Views { get; set; } = new List<BlockView>(); // Users/anonymous who viewed this block
     }
 }

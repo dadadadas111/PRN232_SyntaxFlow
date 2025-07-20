@@ -14,6 +14,7 @@ namespace Models
         public DbSet<Tag> Tags { get; set; }
         public DbSet<BlockTag> BlockTags { get; set; }
         public DbSet<BlockStar> BlockStars { get; set; }
+        public DbSet<BlockView> BlockViews { get; set; }
 
         protected override void OnModelCreating(ModelBuilder builder)
         {
@@ -70,6 +71,25 @@ namespace Models
                 
                 entity.HasOne(e => e.Block)
                     .WithMany(e => e.Stars)
+                    .HasForeignKey(e => e.BlockId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(e => e.User)
+                    .WithMany()
+                    .HasForeignKey(e => e.UserId)
+                    .OnDelete(DeleteBehavior.NoAction);
+            });
+
+            // Configure BlockView entity
+            builder.Entity<BlockView>(entity =>
+            {
+                entity.HasIndex(e => e.BlockId);
+                entity.HasIndex(e => e.UserId);
+                entity.HasIndex(e => e.ViewedAt);
+                entity.HasIndex(e => e.IpAddress);
+                
+                entity.HasOne(e => e.Block)
+                    .WithMany(e => e.Views)
                     .HasForeignKey(e => e.BlockId)
                     .OnDelete(DeleteBehavior.Cascade);
 

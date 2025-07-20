@@ -299,5 +299,109 @@ namespace API.Controllers
                 return BadRequest(new { message = ex.Message });
             }
         }
+
+        // Fork System Endpoints
+
+        /// <summary>
+        /// Fork a block (creates new block with ForkedFromId set)
+        /// </summary>
+        [HttpPost("{id}/fork")]
+        public async Task<ActionResult<ForkResponse>> ForkBlock(int id, [FromBody] ForkBlockRequest? request = null)
+        {
+            try
+            {
+                var userId = GetCurrentUserId();
+                var result = await _blockService.ForkBlockAsync(id, userId, request?.Name);
+                return Ok(result);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return Unauthorized(new { message = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Get all forks of a specific block
+        /// </summary>
+        [HttpGet("{id}/forks")]
+        [AllowAnonymous]
+        public async Task<ActionResult<IEnumerable<BlockListResponse>>> GetBlockForks(int id)
+        {
+            try
+            {
+                var forks = await _blockService.GetBlockForksAsync(id);
+                return Ok(forks);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Get blocks that the current user has forked
+        /// </summary>
+        [HttpGet("forked")]
+        public async Task<ActionResult<IEnumerable<BlockListResponse>>> GetForkedBlocks()
+        {
+            try
+            {
+                var userId = GetCurrentUserId();
+                var forkedBlocks = await _blockService.GetForkedBlocksAsync(userId);
+                return Ok(forkedBlocks);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return Unauthorized(new { message = ex.Message });
+            }
+        }
+
+        // Enhanced Block Management Endpoints
+
+        /// <summary>
+        /// Get trending blocks based on recent activity
+        /// </summary>
+        [HttpGet("trending")]
+        [AllowAnonymous]
+        public async Task<ActionResult<IEnumerable<BlockListResponse>>> GetTrendingBlocks(
+            [FromQuery] int days = 7,
+            [FromQuery] int page = 1,
+            [FromQuery] int size = 10)
+        {
+            var trendingBlocks = await _blockService.GetTrendingBlocksAsync(days, page, size);
+            return Ok(trendingBlocks);
+        }
+
+        /// <summary>
+        /// Track a view for a block (called when block is viewed/opened)
+        /// </summary>
+        [HttpPost("{id}/view")]
+        [AllowAnonymous]
+        public async Task<ActionResult> TrackBlockView(int id)
+        {
+            try
+            {
+                string? userId = null;
+                if (User.Identity?.IsAuthenticated == true)
+                {
+                    userId = GetCurrentUserId();
+                }
+
+                // Get client IP address
+                var ipAddress = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "127.0.0.1";
+
+                await _blockService.TrackBlockViewAsync(id, userId, ipAddress);
+                return Ok();
+            }
+            catch (Exception)
+            {
+                // Silently fail view tracking to not impact user experience
+                return Ok();
+            }
+        }
     }
 }
