@@ -23,9 +23,10 @@ namespace UI.Controllers
             return View();
         }
 
-        public IActionResult BlockDetail(int id)
+        public IActionResult BlockDetail(int id, bool isPublic = false)
         {
             ViewBag.BlockId = id;
+            ViewBag.IsPublic = isPublic;
             return View();
         }
 

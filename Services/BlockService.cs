@@ -208,5 +208,84 @@ namespace Services
 
             await _context.SaveChangesAsync();
         }
+
+        public async Task<IEnumerable<BlockListResponse>> GetPublicBlocksAsync(string? search = null, string[]? tags = null, string sortBy = "created", int page = 1, int size = 10)
+        {
+            var query = _context.Blocks
+                .Include(b => b.Owner)
+                .Include(b => b.BlockTags)
+                .ThenInclude(bt => bt.Tag)
+                .Where(b => b.IsPublic);
+
+            // Apply search filter
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                query = query.Where(b => b.Name.Contains(search) || 
+                                        b.BlockTags.Any(bt => bt.Tag.Name.Contains(search)));
+            }
+
+            // Apply tag filters
+            if (tags != null && tags.Length > 0)
+            {
+                query = query.Where(b => b.BlockTags.Any(bt => tags.Contains(bt.Tag.Name)));
+            }
+
+            // Apply sorting
+            query = sortBy.ToLower() switch
+            {
+                "stars" => query.OrderByDescending(b => b.StarCount),
+                "forks" => query.OrderByDescending(b => b.ForkCount),
+                "updated" => query.OrderByDescending(b => b.UpdatedAt),
+                "created" or _ => query.OrderByDescending(b => b.CreatedAt)
+            };
+
+            // Apply pagination
+            var blocks = await query
+                .Skip((page - 1) * size)
+                .Take(size)
+                .ToListAsync();
+
+            return blocks.Select(b => new BlockListResponse
+            {
+                Id = b.Id,
+                Name = b.Name,
+                OwnerId = b.OwnerId,
+                OwnerName = b.Owner.UserName ?? "",
+                IsPublic = b.IsPublic,
+                StarCount = b.StarCount,
+                ForkCount = b.ForkCount,
+                CreatedAt = b.CreatedAt,
+                UpdatedAt = b.UpdatedAt,
+                Tags = b.BlockTags.Select(bt => bt.Tag.Name).ToArray()
+            });
+        }
+
+        public async Task<BlockResponse?> GetPublicBlockByIdAsync(int blockId)
+        {
+            var block = await _context.Blocks
+                .Include(b => b.Owner)
+                .Include(b => b.BlockTags)
+                .ThenInclude(bt => bt.Tag)
+                .FirstOrDefaultAsync(b => b.Id == blockId && b.IsPublic);
+
+            if (block == null)
+                return null;
+
+            return new BlockResponse
+            {
+                Id = block.Id,
+                Name = block.Name,
+                Content = block.Content,
+                OwnerId = block.OwnerId,
+                OwnerName = block.Owner.UserName ?? "",
+                IsPublic = block.IsPublic,
+                StarCount = block.StarCount,
+                ForkCount = block.ForkCount,
+                ForkedFromId = block.ForkedFromId,
+                CreatedAt = block.CreatedAt,
+                UpdatedAt = block.UpdatedAt,
+                Tags = block.BlockTags.Select(bt => bt.Tag.Name).ToArray()
+            };
+        }
     }
 }

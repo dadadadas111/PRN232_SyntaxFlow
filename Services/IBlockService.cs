@@ -9,5 +9,9 @@ namespace Services
         Task<BlockResponse> CreateBlockAsync(CreateBlockRequest request, string userId);
         Task<BlockResponse?> UpdateBlockAsync(int blockId, UpdateBlockRequest request, string userId);
         Task<bool> DeleteBlockAsync(int blockId, string userId);
+        
+        // Public block discovery methods
+        Task<IEnumerable<BlockListResponse>> GetPublicBlocksAsync(string? search = null, string[]? tags = null, string sortBy = "created", int page = 1, int size = 10);
+        Task<BlockResponse?> GetPublicBlockByIdAsync(int blockId);
     }
 }

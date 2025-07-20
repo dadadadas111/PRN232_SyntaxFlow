@@ -43,6 +43,64 @@ namespace API.Controllers
         }
 
         /// <summary>
+        /// Get all public blocks with filtering, sorting, and pagination
+        /// </summary>
+        [HttpGet("public")]
+        [AllowAnonymous]
+        public async Task<ActionResult<IEnumerable<BlockListResponse>>> GetPublicBlocks(
+            [FromQuery] string? search = null,
+            [FromQuery] string? tags = null,
+            [FromQuery] string sortBy = "created",
+            [FromQuery] int page = 1,
+            [FromQuery] int size = 10)
+        {
+            try
+            {
+                // Validate pagination parameters
+                if (page < 1) page = 1;
+                if (size < 1 || size > 50) size = 10; // Max 50 items per page
+
+                // Parse tags parameter
+                string[]? tagArray = null;
+                if (!string.IsNullOrWhiteSpace(tags))
+                {
+                    tagArray = tags.Split(',', StringSplitOptions.RemoveEmptyEntries)
+                                  .Select(t => t.Trim())
+                                  .ToArray();
+                }
+
+                var blocks = await _blockService.GetPublicBlocksAsync(search, tagArray, sortBy, page, size);
+                return Ok(blocks);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Get a specific public block by ID (accessible to all authenticated users)
+        /// </summary>
+        [HttpGet("public/{id}")]
+        [AllowAnonymous]
+        public async Task<ActionResult<BlockResponse>> GetPublicBlock(int id)
+        {
+            try
+            {
+                var block = await _blockService.GetPublicBlockByIdAsync(id);
+                
+                if (block == null)
+                    return NotFound(new { message = "Public block not found" });
+
+                return Ok(block);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
+        /// <summary>
         /// Get a specific block by ID (only if owned by current user)
         /// </summary>
         [HttpGet("{id}")]
