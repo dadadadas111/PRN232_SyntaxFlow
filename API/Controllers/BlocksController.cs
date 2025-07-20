@@ -69,7 +69,14 @@ namespace API.Controllers
                                   .ToArray();
                 }
 
-                var blocks = await _blockService.GetPublicBlocksAsync(search, tagArray, sortBy, page, size);
+                // Get current user ID if authenticated
+                string? currentUserId = null;
+                if (User.Identity?.IsAuthenticated == true)
+                {
+                    currentUserId = GetCurrentUserId();
+                }
+
+                var blocks = await _blockService.GetPublicBlocksAsync(search, tagArray, sortBy, page, size, currentUserId);
                 return Ok(blocks);
             }
             catch (Exception ex)
@@ -87,7 +94,21 @@ namespace API.Controllers
         {
             try
             {
-                var block = await _blockService.GetPublicBlockByIdAsync(id);
+                // Get current user ID if authenticated
+                string? currentUserId = null;
+                if (User.Identity?.IsAuthenticated == true)
+                {
+                    try
+                    {
+                        currentUserId = GetCurrentUserId();
+                    }
+                    catch
+                    {
+                        // Ignore if can't get user ID (anonymous access)
+                    }
+                }
+
+                var block = await _blockService.GetPublicBlockByIdAsync(id, currentUserId);
                 
                 if (block == null)
                     return NotFound(new { message = "Public block not found" });
@@ -196,6 +217,86 @@ namespace API.Controllers
             catch (UnauthorizedAccessException ex)
             {
                 return Unauthorized(new { message = ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Star a block (increment StarCount)
+        /// </summary>
+        [HttpPost("{id}/star")]
+        public async Task<ActionResult<StarResponse>> StarBlock(int id)
+        {
+            try
+            {
+                var userId = GetCurrentUserId();
+                var result = await _blockService.StarBlockAsync(id, userId);
+                return Ok(result);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return Unauthorized(new { message = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Unstar a block (decrement StarCount)
+        /// </summary>
+        [HttpDelete("{id}/star")]
+        public async Task<ActionResult<StarResponse>> UnstarBlock(int id)
+        {
+            try
+            {
+                var userId = GetCurrentUserId();
+                var result = await _blockService.UnstarBlockAsync(id, userId);
+                return Ok(result);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return Unauthorized(new { message = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Get user's starred blocks
+        /// </summary>
+        [HttpGet("starred")]
+        public async Task<ActionResult<IEnumerable<BlockListResponse>>> GetStarredBlocks()
+        {
+            try
+            {
+                var userId = GetCurrentUserId();
+                var blocks = await _blockService.GetStarredBlocksAsync(userId);
+                return Ok(blocks);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return Unauthorized(new { message = ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Get list of users who starred a specific block
+        /// </summary>
+        [HttpGet("{id}/stars")]
+        [AllowAnonymous]
+        public async Task<ActionResult<IEnumerable<StarUserResponse>>> GetBlockStars(int id)
+        {
+            try
+            {
+                var stars = await _blockService.GetBlockStarsAsync(id);
+                return Ok(stars);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { message = ex.Message });
             }
         }
     }

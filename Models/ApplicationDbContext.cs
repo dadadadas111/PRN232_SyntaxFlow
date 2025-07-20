@@ -13,6 +13,7 @@ namespace Models
         public DbSet<Block> Blocks { get; set; }
         public DbSet<Tag> Tags { get; set; }
         public DbSet<BlockTag> BlockTags { get; set; }
+        public DbSet<BlockStar> BlockStars { get; set; }
 
         protected override void OnModelCreating(ModelBuilder builder)
         {
@@ -56,6 +57,26 @@ namespace Models
                     .WithMany(e => e.BlockTags)
                     .HasForeignKey(e => e.TagId)
                     .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            // Configure BlockStar entity
+            builder.Entity<BlockStar>(entity =>
+            {
+                // Unique constraint: users can only star once per block
+                entity.HasIndex(e => new { e.BlockId, e.UserId }).IsUnique();
+                entity.HasIndex(e => e.BlockId);
+                entity.HasIndex(e => e.UserId);
+                entity.HasIndex(e => e.CreatedAt);
+                
+                entity.HasOne(e => e.Block)
+                    .WithMany(e => e.Stars)
+                    .HasForeignKey(e => e.BlockId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(e => e.User)
+                    .WithMany()
+                    .HasForeignKey(e => e.UserId)
+                    .OnDelete(DeleteBehavior.NoAction);
             });
         }
     }

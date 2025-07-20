@@ -39,5 +39,6 @@ namespace Models
         // Navigation properties
         public virtual ICollection<BlockTag> BlockTags { get; set; } = new List<BlockTag>();
         public virtual ICollection<Block> Forks { get; set; } = new List<Block>(); // Blocks forked from this one
+        public virtual ICollection<BlockStar> Stars { get; set; } = new List<BlockStar>(); // Users who starred this block
     }
 }

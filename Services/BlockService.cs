@@ -12,6 +12,15 @@ namespace Services
             _context = context;
         }
 
+        private async Task<bool> IsBlockStarredByUserAsync(int blockId, string? userId)
+        {
+            if (string.IsNullOrEmpty(userId))
+                return false;
+
+            return await _context.BlockStars
+                .AnyAsync(bs => bs.BlockId == blockId && bs.UserId == userId);
+        }
+
         public async Task<IEnumerable<BlockListResponse>> GetUserBlocksAsync(string userId)
         {
             var blocks = await _context.Blocks
@@ -211,6 +220,11 @@ namespace Services
 
         public async Task<IEnumerable<BlockListResponse>> GetPublicBlocksAsync(string? search = null, string[]? tags = null, string sortBy = "created", int page = 1, int size = 10)
         {
+            return await GetPublicBlocksAsync(search, tags, sortBy, page, size, null);
+        }
+
+        public async Task<IEnumerable<BlockListResponse>> GetPublicBlocksAsync(string? search, string[]? tags, string sortBy, int page, int size, string? currentUserId)
+        {
             var query = _context.Blocks
                 .Include(b => b.Owner)
                 .Include(b => b.BlockTags)
@@ -245,6 +259,17 @@ namespace Services
                 .Take(size)
                 .ToListAsync();
 
+            // Get starred status for current user if authenticated
+            var starredBlockIds = new HashSet<int>();
+            if (!string.IsNullOrEmpty(currentUserId))
+            {
+                var blockIds = blocks.Select(b => b.Id).ToList();
+                starredBlockIds = (await _context.BlockStars
+                    .Where(bs => bs.UserId == currentUserId && blockIds.Contains(bs.BlockId))
+                    .Select(bs => bs.BlockId)
+                    .ToListAsync()).ToHashSet();
+            }
+
             return blocks.Select(b => new BlockListResponse
             {
                 Id = b.Id,
@@ -256,11 +281,17 @@ namespace Services
                 ForkCount = b.ForkCount,
                 CreatedAt = b.CreatedAt,
                 UpdatedAt = b.UpdatedAt,
-                Tags = b.BlockTags.Select(bt => bt.Tag.Name).ToArray()
+                Tags = b.BlockTags.Select(bt => bt.Tag.Name).ToArray(),
+                IsStarredByCurrentUser = starredBlockIds.Contains(b.Id)
             });
         }
 
         public async Task<BlockResponse?> GetPublicBlockByIdAsync(int blockId)
+        {
+            return await GetPublicBlockByIdAsync(blockId, null);
+        }
+
+        public async Task<BlockResponse?> GetPublicBlockByIdAsync(int blockId, string? currentUserId)
         {
             var block = await _context.Blocks
                 .Include(b => b.Owner)
@@ -270,6 +301,12 @@ namespace Services
 
             if (block == null)
                 return null;
+
+            bool isStarred = false;
+            if (!string.IsNullOrEmpty(currentUserId))
+            {
+                isStarred = await IsBlockStarredByUserAsync(blockId, currentUserId);
+            }
 
             return new BlockResponse
             {
@@ -284,8 +321,174 @@ namespace Services
                 ForkedFromId = block.ForkedFromId,
                 CreatedAt = block.CreatedAt,
                 UpdatedAt = block.UpdatedAt,
-                Tags = block.BlockTags.Select(bt => bt.Tag.Name).ToArray()
+                Tags = block.BlockTags.Select(bt => bt.Tag.Name).ToArray(),
+                IsStarredByCurrentUser = isStarred
             };
+        }
+
+        public async Task<StarResponse> StarBlockAsync(int blockId, string userId)
+        {
+            using var transaction = await _context.Database.BeginTransactionAsync();
+            try
+            {
+                // Check if block exists and is accessible for starring
+                var block = await _context.Blocks
+                    .FirstOrDefaultAsync(b => b.Id == blockId && (b.IsPublic || b.OwnerId == userId));
+
+                if (block == null)
+                    throw new InvalidOperationException("Block not found or not accessible for starring");
+
+                // Users cannot star their own blocks
+                if (block.OwnerId == userId)
+                    throw new InvalidOperationException("Users cannot star their own blocks");
+
+                // Check if already starred
+                var existingStar = await _context.BlockStars
+                    .FirstOrDefaultAsync(bs => bs.BlockId == blockId && bs.UserId == userId);
+
+                if (existingStar != null)
+                {
+                    // Already starred, return current state
+                    return new StarResponse
+                    {
+                        IsStarred = true,
+                        StarCount = block.StarCount,
+                        StarredAt = existingStar.CreatedAt
+                    };
+                }
+
+                // Create new star
+                var blockStar = new BlockStar
+                {
+                    BlockId = blockId,
+                    UserId = userId,
+                    CreatedAt = DateTime.UtcNow
+                };
+
+                _context.BlockStars.Add(blockStar);
+
+                // Increment star count
+                block.StarCount++;
+                block.UpdatedAt = DateTime.UtcNow;
+
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+
+                return new StarResponse
+                {
+                    IsStarred = true,
+                    StarCount = block.StarCount,
+                    StarredAt = blockStar.CreatedAt
+                };
+            }
+            catch
+            {
+                await transaction.RollbackAsync();
+                throw;
+            }
+        }
+
+        public async Task<StarResponse> UnstarBlockAsync(int blockId, string userId)
+        {
+            using var transaction = await _context.Database.BeginTransactionAsync();
+            try
+            {
+                // Check if block exists
+                var block = await _context.Blocks
+                    .FirstOrDefaultAsync(b => b.Id == blockId);
+
+                if (block == null)
+                    throw new InvalidOperationException("Block not found");
+
+                // Find the star
+                var blockStar = await _context.BlockStars
+                    .FirstOrDefaultAsync(bs => bs.BlockId == blockId && bs.UserId == userId);
+
+                if (blockStar == null)
+                {
+                    // Not starred, return current state
+                    return new StarResponse
+                    {
+                        IsStarred = false,
+                        StarCount = block.StarCount,
+                        StarredAt = null
+                    };
+                }
+
+                // Remove star
+                _context.BlockStars.Remove(blockStar);
+
+                // Decrement star count
+                block.StarCount = Math.Max(0, block.StarCount - 1);
+                block.UpdatedAt = DateTime.UtcNow;
+
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+
+                return new StarResponse
+                {
+                    IsStarred = false,
+                    StarCount = block.StarCount,
+                    StarredAt = null
+                };
+            }
+            catch
+            {
+                await transaction.RollbackAsync();
+                throw;
+            }
+        }
+
+        public async Task<IEnumerable<BlockListResponse>> GetStarredBlocksAsync(string userId)
+        {
+            var starredBlocks = await _context.BlockStars
+                .Include(bs => bs.Block)
+                .ThenInclude(b => b.Owner)
+                .Include(bs => bs.Block)
+                .ThenInclude(b => b.BlockTags)
+                .ThenInclude(bt => bt.Tag)
+                .Where(bs => bs.UserId == userId)
+                .OrderByDescending(bs => bs.CreatedAt)
+                .Select(bs => bs.Block)
+                .ToListAsync();
+
+            return starredBlocks.Select(b => new BlockListResponse
+            {
+                Id = b.Id,
+                Name = b.Name,
+                OwnerId = b.OwnerId,
+                OwnerName = b.Owner.UserName ?? "",
+                IsPublic = b.IsPublic,
+                StarCount = b.StarCount,
+                ForkCount = b.ForkCount,
+                CreatedAt = b.CreatedAt,
+                UpdatedAt = b.UpdatedAt,
+                Tags = b.BlockTags.Select(bt => bt.Tag.Name).ToArray(),
+                IsStarredByCurrentUser = true // Always true for starred blocks list
+            });
+        }
+
+        public async Task<IEnumerable<StarUserResponse>> GetBlockStarsAsync(int blockId)
+        {
+            // Check if block exists and is public
+            var block = await _context.Blocks
+                .FirstOrDefaultAsync(b => b.Id == blockId && b.IsPublic);
+
+            if (block == null)
+                throw new InvalidOperationException("Block not found or not public");
+
+            var stars = await _context.BlockStars
+                .Include(bs => bs.User)
+                .Where(bs => bs.BlockId == blockId)
+                .OrderByDescending(bs => bs.CreatedAt)
+                .ToListAsync();
+
+            return stars.Select(bs => new StarUserResponse
+            {
+                UserId = bs.UserId,
+                UserName = bs.User.UserName ?? "",
+                StarredAt = bs.CreatedAt
+            });
         }
     }
 }

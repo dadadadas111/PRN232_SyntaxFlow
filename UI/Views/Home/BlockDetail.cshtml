@@ -221,8 +221,12 @@ function loadBlock() {
     let apiUrl, headers = {};
     
     if (isPublic) {
-        // For public blocks, use the public API endpoint (no auth required)
+        // For public blocks, use the public API endpoint
         apiUrl = apiBaseUrl + "api/blocks/public/" + blockId;
+        // Add auth header if user is logged in to get star status
+        if (jwt) {
+            headers["Authorization"] = "Bearer " + jwt;
+        }
     } else {
         // For private blocks, use the regular API endpoint with auth
         if (!jwt) {
@@ -292,6 +296,10 @@ function displayBlock(block) {
         document.getElementById('forkBtn').style.display = 'inline-block';
         document.getElementById('editModeBtn').style.display = 'none';
         document.getElementById('settingsBtn').style.display = 'none';
+        
+        // Update star button state based on whether user has starred this block
+        const isStarred = block.isStarredByCurrentUser || false;
+        updateStarButton(isStarred, block.starCount);
     } else {
         // For user's own blocks, show edit and settings
         document.getElementById('starBtn').style.display = 'none';
@@ -611,13 +619,161 @@ document.getElementById("copyCodeBtn").onclick = function() {
     }
 };
 
-// Star and Fork functionality (Phase 2 & 3 placeholders)
+// Star and Fork functionality (Phase 2 & 3)
 function starBlock() {
-    alert('Star functionality coming in Phase 2!');
+    const jwt = localStorage.getItem("token");
+    if (!jwt) {
+        alert('Please login first to star blocks.');
+        return;
+    }
+
+    const starBtn = document.getElementById('starBtn');
+    const originalText = starBtn.innerHTML;
+    starBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> Starring...';
+    starBtn.disabled = true;
+
+    fetch(`${apiBaseUrl}api/blocks/${blockId}/star`, {
+        method: 'POST',
+        headers: {
+            'Authorization': 'Bearer ' + jwt,
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(async res => {
+        if (!res.ok) {
+            const errorData = await res.json();
+            throw new Error(errorData.message || 'Failed to star block');
+        }
+        return res.json();
+    })
+    .then(result => {
+        // Update the star count in the current block
+        if (currentBlock) {
+            currentBlock.starCount = result.starCount;
+            displayBlock(currentBlock);
+        }
+        
+        // Update button state
+        updateStarButton(result.isStarred, result.starCount);
+        
+        // Show success feedback
+        showToast('Block starred successfully!', 'success');
+    })
+    .catch(err => {
+        console.error('Error starring block:', err);
+        starBtn.innerHTML = originalText;
+        starBtn.disabled = false;
+        showToast(err.message || 'Failed to star block', 'error');
+    });
+}
+
+function unstarBlock() {
+    const jwt = localStorage.getItem("token");
+    if (!jwt) {
+        alert('Please login first.');
+        return;
+    }
+
+    const starBtn = document.getElementById('starBtn');
+    const originalText = starBtn.innerHTML;
+    starBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> Unstarring...';
+    starBtn.disabled = true;
+
+    fetch(`${apiBaseUrl}api/blocks/${blockId}/star`, {
+        method: 'DELETE',
+        headers: {
+            'Authorization': 'Bearer ' + jwt,
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(async res => {
+        if (!res.ok) {
+            const errorData = await res.json();
+            throw new Error(errorData.message || 'Failed to unstar block');
+        }
+        return res.json();
+    })
+    .then(result => {
+        // Update the star count in the current block
+        if (currentBlock) {
+            currentBlock.starCount = result.starCount;
+            displayBlock(currentBlock);
+        }
+        
+        // Update button state
+        updateStarButton(result.isStarred, result.starCount);
+        
+        // Show success feedback
+        showToast('Block unstarred successfully!', 'success');
+    })
+    .catch(err => {
+        console.error('Error unstarring block:', err);
+        starBtn.innerHTML = originalText;
+        starBtn.disabled = false;
+        showToast(err.message || 'Failed to unstar block', 'error');
+    });
+}
+
+function updateStarButton(isStarred, starCount) {
+    const starBtn = document.getElementById('starBtn');
+    if (!starBtn) return;
+
+    starBtn.disabled = false;
+    
+    if (isStarred) {
+        starBtn.className = 'btn btn-warning me-2';
+        starBtn.innerHTML = '<i class="bi bi-star-fill"></i> Starred (' + starCount + ')';
+        starBtn.onclick = unstarBlock;
+        starBtn.title = 'Unstar this block';
+    } else {
+        starBtn.className = 'btn btn-outline-warning me-2';
+        starBtn.innerHTML = '<i class="bi bi-star"></i> Star (' + starCount + ')';
+        starBtn.onclick = starBlock;
+        starBtn.title = 'Star this block';
+    }
 }
 
 function forkBlock() {
     alert('Fork functionality coming in Phase 3!');
+}
+
+function showToast(message, type) {
+    // Create toast element
+    const toastContainer = document.getElementById('toastContainer') || createToastContainer();
+    const toastId = 'toast-' + Date.now();
+    const bgClass = type === 'success' ? 'bg-success' : 'bg-danger';
+    
+    const toastHTML = `
+        <div id="${toastId}" class="toast ${bgClass} text-white" role="alert" aria-live="assertive" aria-atomic="true">
+            <div class="d-flex">
+                <div class="toast-body">
+                    ${message}
+                </div>
+                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+            </div>
+        </div>
+    `;
+    
+    toastContainer.insertAdjacentHTML('beforeend', toastHTML);
+    
+    // Initialize and show toast
+    const toastElement = document.getElementById(toastId);
+    const toast = new bootstrap.Toast(toastElement, { delay: 3000 });
+    toast.show();
+    
+    // Remove element after hiding
+    toastElement.addEventListener('hidden.bs.toast', () => {
+        toastElement.remove();
+    });
+}
+
+function createToastContainer() {
+    const container = document.createElement('div');
+    container.id = 'toastContainer';
+    container.className = 'toast-container position-fixed top-0 end-0 p-3';
+    container.style.zIndex = '1080';
+    document.body.appendChild(container);
+    return container;
 }
 
 function escapeHtml(text) {

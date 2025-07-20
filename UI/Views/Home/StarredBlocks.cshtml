@@ -1,0 +1,303 @@
+@{
+    ViewData["Title"] = "Starred Blocks";
+    var apiBaseUrl = "https://localhost:7174/";
+}
+
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2>Starred Blocks</h2>
+            <p class="text-muted">Blocks you've starred from the community</p>
+        </div>
+        <a href="@Url.Action("SharedBlocks", "Home")" class="btn btn-outline-primary">
+            <i class="bi bi-search"></i> Discover More Blocks
+        </a>
+    </div>
+
+    <!-- Loading State -->
+    <div id="loadingState" class="text-center py-5">
+        <div class="spinner-border" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+        <p class="mt-2">Loading your starred blocks...</p>
+    </div>
+
+    <!-- Blocks Container -->
+    <div id="blocksContainer" class="row" style="display: none;">
+        <!-- Starred blocks will be dynamically loaded here -->
+    </div>
+
+    <!-- Empty State -->
+    <div id="emptyState" class="text-center py-5" style="display: none;">
+        <i class="bi bi-star" style="font-size: 3rem; color: #6c757d;"></i>
+        <h3 class="mt-3">No starred blocks yet</h3>
+        <p class="text-muted">Discover and star blocks from the community to see them here!</p>
+        <a href="@Url.Action("SharedBlocks", "Home")" class="btn btn-primary">Browse Shared Blocks</a>
+    </div>
+</div>
+
+<script>
+var apiBaseUrl = '@apiBaseUrl';
+
+document.addEventListener('DOMContentLoaded', function() {
+    loadStarredBlocks();
+});
+
+function loadStarredBlocks() {
+    const jwt = localStorage.getItem("token");
+    if (!jwt) {
+        window.location.href = '@Url.Action("Index", "Home")';
+        return;
+    }
+
+    showLoading();
+
+    fetch(apiBaseUrl + "api/blocks/starred", {
+        method: "GET",
+        headers: {
+            "Authorization": "Bearer " + jwt
+        }
+    })
+    .then(res => {
+        if (!res.ok) {
+            throw new Error("Failed to load starred blocks");
+        }
+        return res.json();
+    })
+    .then(blocks => {
+        displayStarredBlocks(blocks);
+    })
+    .catch(err => {
+        console.error("Error loading starred blocks:", err);
+        showError('Failed to load starred blocks. Please try again.');
+    });
+}
+
+function displayStarredBlocks(blocks) {
+    const container = document.getElementById('blocksContainer');
+    const emptyState = document.getElementById('emptyState');
+    const loadingState = document.getElementById('loadingState');
+    
+    loadingState.style.display = 'none';
+    
+    if (!blocks || blocks.length === 0) {
+        container.style.display = 'none';
+        emptyState.style.display = 'block';
+        return;
+    }
+    
+    container.style.display = 'flex';
+    emptyState.style.display = 'none';
+    
+    container.innerHTML = blocks.map(block => `
+        <div class="col-md-6 col-lg-4 mb-4">
+            <div class="card h-100 starred-block-card" onclick="viewPublicBlock(${block.id})">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <h5 class="card-title text-truncate" style="max-width: 200px;" title="${escapeHtml(block.name)}">
+                            ${escapeHtml(block.name)}
+                        </h5>
+                        <span class="badge ${block.isPublic ? 'bg-success' : 'bg-secondary'} ms-2">
+                            <i class="bi ${block.isPublic ? 'bi-globe' : 'bi-lock'}"></i>
+                            ${block.isPublic ? 'Public' : 'Private'}
+                        </span>
+                    </div>
+                    
+                    <div class="mb-2">
+                        <small class="text-muted">
+                            <i class="bi bi-person"></i> by ${escapeHtml(block.ownerName)}
+                        </small>
+                    </div>
+                    
+                    <div class="mb-2">
+                        ${block.tags.map(tag => `<span class="badge bg-secondary me-1">${escapeHtml(tag)}</span>`).join('')}
+                    </div>
+                    
+                    <div class="mb-2 text-muted small">
+                        <span class="me-3" title="Star count">
+                            <i class="bi bi-star-fill text-warning"></i> ${block.starCount}
+                        </span>
+                        <span title="Fork count">
+                            <i class="bi bi-arrow-up-right-square"></i> ${block.forkCount}
+                        </span>
+                    </div>
+                    
+                    <p class="card-text text-muted small">
+                        <i class="bi bi-calendar"></i> Created: ${new Date(block.createdAt).toLocaleDateString()}
+                        <br>
+                        <i class="bi bi-pencil"></i> Updated: ${new Date(block.updatedAt).toLocaleDateString()}
+                    </p>
+                </div>
+                
+                <div class="card-footer bg-transparent">
+                    <div class="d-flex justify-content-between">
+                        <button class="btn btn-primary btn-sm" onclick="event.stopPropagation(); viewPublicBlock(${block.id})">
+                            <i class="bi bi-eye"></i> View
+                        </button>
+                        <div>
+                            <button class="btn btn-warning btn-sm me-1" onclick="event.stopPropagation(); unstarBlock(${block.id})" 
+                                    title="Unstar this block">
+                                <i class="bi bi-star-fill"></i> Starred
+                            </button>
+                            <button class="btn btn-outline-info btn-sm" onclick="event.stopPropagation(); forkBlock(${block.id})" 
+                                    title="Fork this block">
+                                <i class="bi bi-arrow-up-right-square"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `).join('');
+}
+
+function viewPublicBlock(blockId) {
+    window.location.href = `@Url.Action("BlockDetail", "Home")?id=${blockId}&isPublic=true`;
+}
+
+function unstarBlock(blockId) {
+    const jwt = localStorage.getItem("token");
+    if (!jwt) {
+        alert('Please login first.');
+        return;
+    }
+
+    // Find the unstar button for this block
+    const unstarBtn = document.querySelector(`button[onclick*="unstarBlock(${blockId})"]`);
+    if (!unstarBtn) return;
+
+    const originalText = unstarBtn.innerHTML;
+    unstarBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> Removing...';
+    unstarBtn.disabled = true;
+
+    fetch(`${apiBaseUrl}api/blocks/${blockId}/star`, {
+        method: 'DELETE',
+        headers: {
+            'Authorization': 'Bearer ' + jwt,
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(async res => {
+        if (!res.ok) {
+            const errorData = await res.json();
+            throw new Error(errorData.message || 'Failed to unstar block');
+        }
+        return res.json();
+    })
+    .then(result => {
+        // Remove the block card from the page
+        const blockCard = unstarBtn.closest('.col-md-6');
+        if (blockCard) {
+            blockCard.remove();
+        }
+        
+        // Check if no blocks left and show empty state
+        const remainingBlocks = document.querySelectorAll('#blocksContainer .col-md-6');
+        if (remainingBlocks.length === 0) {
+            document.getElementById('blocksContainer').style.display = 'none';
+            document.getElementById('emptyState').style.display = 'block';
+        }
+        
+        showToast('Block unstarred successfully!', 'success');
+    })
+    .catch(err => {
+        console.error('Error unstarring block:', err);
+        unstarBtn.innerHTML = originalText;
+        unstarBtn.disabled = false;
+        showToast(err.message || 'Failed to unstar block', 'error');
+    });
+}
+
+function forkBlock(blockId) {
+    // Placeholder for fork functionality (Phase 3)
+    alert('Fork functionality coming in Phase 3!');
+}
+
+function showLoading() {
+    document.getElementById('loadingState').style.display = 'block';
+    document.getElementById('blocksContainer').style.display = 'none';
+    document.getElementById('emptyState').style.display = 'none';
+}
+
+function showError(message) {
+    document.getElementById('loadingState').style.display = 'none';
+    document.getElementById('blocksContainer').style.display = 'none';
+    document.getElementById('emptyState').style.display = 'block';
+    document.getElementById('emptyState').innerHTML = `
+        <i class="bi bi-exclamation-triangle" style="font-size: 3rem; color: #dc3545;"></i>
+        <h3 class="mt-3">Error</h3>
+        <p class="text-muted">${message}</p>
+        <button class="btn btn-primary" onclick="loadStarredBlocks()">Try Again</button>
+    `;
+}
+
+function showToast(message, type) {
+    // Create toast element
+    const toastContainer = document.getElementById('toastContainer') || createToastContainer();
+    const toastId = 'toast-' + Date.now();
+    const bgClass = type === 'success' ? 'bg-success' : 'bg-danger';
+    
+    const toastHTML = `
+        <div id="${toastId}" class="toast ${bgClass} text-white" role="alert" aria-live="assertive" aria-atomic="true">
+            <div class="d-flex">
+                <div class="toast-body">
+                    ${message}
+                </div>
+                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+            </div>
+        </div>
+    `;
+    
+    toastContainer.insertAdjacentHTML('beforeend', toastHTML);
+    
+    // Initialize and show toast
+    const toastElement = document.getElementById(toastId);
+    const toast = new bootstrap.Toast(toastElement, { delay: 3000 });
+    toast.show();
+    
+    // Remove element after hiding
+    toastElement.addEventListener('hidden.bs.toast', () => {
+        toastElement.remove();
+    });
+}
+
+function createToastContainer() {
+    const container = document.createElement('div');
+    container.id = 'toastContainer';
+    container.className = 'toast-container position-fixed top-0 end-0 p-3';
+    container.style.zIndex = '1080';
+    document.body.appendChild(container);
+    return container;
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+</script>
+
+<style>
+.starred-block-card {
+    cursor: pointer;
+    transition: transform 0.2s, box-shadow 0.2s;
+    border-left: 4px solid #ffc107; /* Gold border to indicate starred */
+}
+
+.starred-block-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+
+.card-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+}
+
+.badge {
+    font-size: 0.75rem;
+}
+</style>
+
+<!-- Bootstrap Icons -->
+<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">

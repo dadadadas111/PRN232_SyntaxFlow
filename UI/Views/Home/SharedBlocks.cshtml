@@ -185,9 +185,10 @@ function displayBlocks(blocks) {
                             <i class="bi bi-eye"></i> View
                         </button>
                         <div>
-                            <button class="btn btn-outline-warning btn-sm me-1" onclick="event.stopPropagation(); starBlock(${block.id})" 
-                                    title="Star this block">
-                                <i class="bi bi-star"></i>
+                            <button class="btn ${block.isStarredByCurrentUser ? 'btn-warning' : 'btn-outline-warning'} btn-sm me-1" 
+                                    onclick="event.stopPropagation(); ${block.isStarredByCurrentUser ? 'unstarBlock' : 'starBlock'}(${block.id})" 
+                                    title="${block.isStarredByCurrentUser ? 'Starred - Click to unstar' : 'Star this block'}">
+                                <i class="bi bi-star${block.isStarredByCurrentUser ? '-fill' : ''}"></i>
                             </button>
                             <button class="btn btn-outline-info btn-sm" onclick="event.stopPropagation(); forkBlock(${block.id})" 
                                     title="Fork this block">
@@ -210,13 +211,158 @@ function viewPublicBlock(blockId) {
 }
 
 function starBlock(blockId) {
-    // Placeholder for star functionality (Phase 2)
-    alert('Star functionality coming in Phase 2!');
+    const jwt = localStorage.getItem("token");
+    if (!jwt) {
+        alert('Please login first to star blocks.');
+        return;
+    }
+
+    // Find the star button for this block
+    const starBtn = document.querySelector(`button[onclick*="starBlock(${blockId})"]`);
+    if (!starBtn) return;
+
+    const originalText = starBtn.innerHTML;
+    starBtn.innerHTML = '<i class="bi bi-hourglass-split"></i>';
+    starBtn.disabled = true;
+
+    fetch(`${apiBaseUrl}api/blocks/${blockId}/star`, {
+        method: 'POST',
+        headers: {
+            'Authorization': 'Bearer ' + jwt,
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(async res => {
+        if (!res.ok) {
+            const errorData = await res.json();
+            throw new Error(errorData.message || 'Failed to star block');
+        }
+        return res.json();
+    })
+    .then(result => {
+        // Update button state
+        updateStarButtonInCard(starBtn, result.isStarred, result.starCount);
+        showToast('Block starred successfully!', 'success');
+    })
+    .catch(err => {
+        console.error('Error starring block:', err);
+        starBtn.innerHTML = originalText;
+        starBtn.disabled = false;
+        showToast(err.message || 'Failed to star block', 'error');
+    });
+}
+
+function unstarBlock(blockId) {
+    const jwt = localStorage.getItem("token");
+    if (!jwt) {
+        alert('Please login first.');
+        return;
+    }
+
+    // Find the star button for this block
+    const starBtn = document.querySelector(`button[onclick*="unstarBlock(${blockId})"]`);
+    if (!starBtn) return;
+
+    const originalText = starBtn.innerHTML;
+    starBtn.innerHTML = '<i class="bi bi-hourglass-split"></i>';
+    starBtn.disabled = true;
+
+    fetch(`${apiBaseUrl}api/blocks/${blockId}/star`, {
+        method: 'DELETE',
+        headers: {
+            'Authorization': 'Bearer ' + jwt,
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(async res => {
+        if (!res.ok) {
+            const errorData = await res.json();
+            throw new Error(errorData.message || 'Failed to unstar block');
+        }
+        return res.json();
+    })
+    .then(result => {
+        // Update button state
+        updateStarButtonInCard(starBtn, result.isStarred, result.starCount);
+        showToast('Block unstarred successfully!', 'success');
+    })
+    .catch(err => {
+        console.error('Error unstarring block:', err);
+        starBtn.innerHTML = originalText;
+        starBtn.disabled = false;
+        showToast(err.message || 'Failed to unstar block', 'error');
+    });
+}
+
+function updateStarButtonInCard(starBtn, isStarred, starCount) {
+    starBtn.disabled = false;
+    
+    if (isStarred) {
+        starBtn.className = 'btn btn-warning btn-sm me-1';
+        starBtn.innerHTML = '<i class="bi bi-star-fill"></i>';
+        starBtn.title = `Starred (${starCount}) - Click to unstar`;
+        
+        // Extract block ID from current onclick
+        const blockId = extractBlockIdFromOnclick(starBtn.onclick.toString());
+        starBtn.onclick = () => { event.stopPropagation(); unstarBlock(blockId); };
+    } else {
+        starBtn.className = 'btn btn-outline-warning btn-sm me-1';
+        starBtn.innerHTML = '<i class="bi bi-star"></i>';
+        starBtn.title = `Star this block (${starCount})`;
+        
+        // Extract block ID from current onclick
+        const blockId = extractBlockIdFromOnclick(starBtn.onclick.toString());
+        starBtn.onclick = () => { event.stopPropagation(); starBlock(blockId); };
+    }
+}
+
+function extractBlockIdFromOnclick(onclickStr) {
+    const match = onclickStr.match(/\((\d+)\)/);
+    return match ? parseInt(match[1]) : null;
 }
 
 function forkBlock(blockId) {
     // Placeholder for fork functionality (Phase 3)
     alert('Fork functionality coming in Phase 3!');
+}
+
+function showToast(message, type) {
+    // Create toast element
+    const toastContainer = document.getElementById('toastContainer') || createToastContainer();
+    const toastId = 'toast-' + Date.now();
+    const bgClass = type === 'success' ? 'bg-success' : 'bg-danger';
+    
+    const toastHTML = `
+        <div id="${toastId}" class="toast ${bgClass} text-white" role="alert" aria-live="assertive" aria-atomic="true">
+            <div class="d-flex">
+                <div class="toast-body">
+                    ${message}
+                </div>
+                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+            </div>
+        </div>
+    `;
+    
+    toastContainer.insertAdjacentHTML('beforeend', toastHTML);
+    
+    // Initialize and show toast
+    const toastElement = document.getElementById(toastId);
+    const toast = new bootstrap.Toast(toastElement, { delay: 3000 });
+    toast.show();
+    
+    // Remove element after hiding
+    toastElement.addEventListener('hidden.bs.toast', () => {
+        toastElement.remove();
+    });
+}
+
+function createToastContainer() {
+    const container = document.createElement('div');
+    container.id = 'toastContainer';
+    container.className = 'toast-container position-fixed top-0 end-0 p-3';
+    container.style.zIndex = '1080';
+    document.body.appendChild(container);
+    return container;
 }
 
 function searchBlocks() {

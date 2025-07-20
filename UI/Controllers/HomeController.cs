@@ -35,6 +35,11 @@ namespace UI.Controllers
             return View();
         }
 
+        public IActionResult StarredBlocks()
+        {
+            return View();
+        }
+
         public IActionResult Privacy()
         {
             return View();
