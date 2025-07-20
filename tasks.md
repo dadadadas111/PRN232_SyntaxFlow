@@ -1,150 +1,152 @@
+# SyntaxFlow Project Tasks
 
-## 🌟 **API Tasks for Share Block Features, Stars, and Forks**
+## Real-Time Comment System
 
-### **Phase 1: Public Block Discovery & Sharing**
+### Overview
+Implement a real-time comment system for blocks where users can comment under blocks with live updates via MQTT messaging.
 
-**Task 1.1: Public Blocks API Endpoints**
-- Add `GET /api/blocks/public` - Get all public blocks with pagination, sorting, and filtering
-- Add `GET /api/blocks/public/{id}` - Get public block details (accessible to all authenticated users)
-- Add search parameters: `?search=keyword&tags=tag1,tag2&sortBy=stars|forks|created|updated&page=1&size=10`
+### Technical Requirements
 
-**Task 1.2: Block Visibility Management**
-- Update existing `PUT /api/blocks/{id}` to handle `IsPublic` property (done)
-- Add validation: only block owner can change visibility (done)
+#### 1. Database Schema
+- [ ] Create `Comment` model/entity
+  - `Id` (int, primary key)
+  - `BlockId` (int, foreign key to Block)
+  - `UserId` (string, foreign key to User)
+  - `Content` (string, comment text)
+  - `CreatedAt` (DateTime)
+  - `UpdatedAt` (DateTime)
+  - `IsDeleted` (bool, for soft deletion)
 
-### **Phase 2: Star System**
+- [ ] Update `ApplicationDbContext`
+  - Add `DbSet<Comment> Comments`
+  - Configure relationships and constraints
+  - Create migration for Comment table
 
-**Task 2.1: Star Database Models**
-- Create `BlockStar` entity: `Id, BlockId, UserId, CreatedAt`
-- Add unique constraint on `(BlockId, UserId)` - users can only star once per block
-- Update database migration
+#### 2. API Development
+- [ ] Create `CommentController`
+  - `GET /api/comments/{blockId}` - Get comments for a block
+  - `POST /api/comments` - Create new comment
+  - `PUT /api/comments/{id}` - Update comment (optional)
+  - `DELETE /api/comments/{id}` - Delete comment (optional)
 
-**Task 2.2: Star API Endpoints**
-- Add `POST /api/blocks/{id}/star` - Star a block (increment StarCount)
-- Add `DELETE /api/blocks/{id}/star` - Unstar a block (decrement StarCount)
-- Add `GET /api/blocks/starred` - Get user's starred blocks
-- Add `GET /api/blocks/{id}/stars` - Get list of users who starred the block
+- [ ] Create `CommentService` and `ICommentService`
+  - `GetCommentsByBlockIdAsync(int blockId)`
+  - `CreateCommentAsync(CommentCreateDto dto, string userId)`
+  - `UpdateCommentAsync(int id, string content, string userId)` (optional)
+  - `DeleteCommentAsync(int id, string userId)` (optional)
 
-**Task 2.3: Star Business Logic**
-- Implement star/unstar service methods with transaction safety
-- Update `StarCount` automatically when stars are added/removed
-- Validate: users cannot star their own blocks
-- Validate: users cannot star private blocks they don't own
+- [ ] Create DTOs
+  - `CommentDto` - for returning comment data
+  - `CommentCreateDto` - for creating comments
+  - `CommentUpdateDto` - for updating comments (optional)
 
-### **Phase 3: Fork System**
+#### 3. MQTT Integration
+- [ ] Install MQTT packages
+  - `MQTTnet` or `MQTTnet.AspNetCore`
+  - Configure MQTT client/broker settings
 
-**Task 3.1: Fork API Endpoints**
-- Add `POST /api/blocks/{id}/fork` - Fork a block (creates new block with ForkedFromId set)
-- Add `GET /api/blocks/{id}/forks` - Get all forks of a block
-- Add `GET /api/blocks/forked` - Get blocks user has forked
+- [ ] Create `MqttService` and `IMqttService`
+  - `PublishCommentAsync(CommentDto comment)`
+  - Connection management
+  - Topic structure: `syntaxflow/comments/{blockId}`
 
-**Task 3.2: Fork Business Logic**
-- Copy block content, name (with "Fork of" prefix), and tags
-- Set new owner, reset star/fork counts to 0
-- Increment original block's `ForkCount`
-- Validate: users can fork public blocks and their own blocks
-- Handle fork chains (track original source)
+- [ ] Update `CommentService`
+  - Publish to MQTT after saving comment to database
+  - Handle MQTT publishing errors gracefully
 
-### **Phase 4: Enhanced Block Management**
+#### 4. Frontend Development
+- [ ] Create comment UI components
+  - Comment list display
+  - Comment input form
+  - Real-time comment updates
+  - User authentication check
 
-**Task 4.1: Advanced Block Queries**
-- Add trending algorithm (recent stars + forks weighted by time)
-- Add `GET /api/blocks/trending` endpoint
-- Add block statistics in responses (total views, fork depth)
+- [ ] JavaScript MQTT client
+  - Install MQTT client library (e.g., `mqtt.js` via CDN)
+  - Subscribe to comment topics
+  - Handle incoming comment messages
+  - Update DOM in real-time
 
-**Task 4.2: User Activity Tracking**
-- Create `BlockView` entity for view tracking
-- Add view count to block responses
-- Track user activity for recommendations
+- [ ] Update block detail views
+  - Add comment section to `BlockDetail.cshtml`
+  - Add comment section to `SharedBlocks.cshtml` (optional)
+  - Style comment components with Bootstrap
 
----
+#### 5. Security & Validation
+- [ ] Authentication requirements
+  - Only authenticated users can post comments
+  - Users can only edit/delete their own comments
 
-## 🎨 **UI Tasks for Share Block Features, Stars, and Forks**
+- [ ] Input validation
+  - Comment content length limits
+  - XSS protection
+  - SQL injection prevention
 
-### **Phase 1: Public Block Discovery**
+- [ ] Rate limiting
+  - Prevent comment spam
+  - MQTT message throttling
 
-**Task 1.1: Shared Blocks Page Enhancement**
-- Replace placeholder in SharedBlocks.cshtml with functional block browser
-- Add search bar with keyword and tag filtering
-- Add sorting options (Most Stars, Most Forks, Newest, Recently Updated)
-- Implement infinite scroll or pagination
-- Show block cards with: name, owner, star count, fork count, tags, preview
+#### 6. Configuration
+- [ ] Update `appsettings.json`
+  - MQTT broker configuration
+  - Comment system settings
+  - Rate limiting settings
 
-**Task 1.2: Block Discovery Features**
-- Add "Public" tab to navigation if not present
-- Add trending section on home page
-- Add "Recently Shared" section
-- Show public/private indicator on all block lists
+- [ ] Environment variables
+  - MQTT credentials
+  - Connection strings
 
-### **Phase 2: Star System UI**
+### Implementation Steps
 
-**Task 2.1: Star Button Implementation**
-- Add star button to BlockDetail.cshtml (filled/unfilled star icon)
-- Add star button to block cards in MyBlocks.cshtml and SharedBlocks.cshtml
-- Show star count next to star button
-- Implement star/unstar click handlers with API calls
-- Add visual feedback (loading states, success animations)
+#### Phase 1: Backend Foundation
+1. Create Comment model and database migration
+2. Implement CommentService with basic CRUD operations
+3. Create CommentController with API endpoints
+4. Add MQTT service integration
 
-**Task 2.2: Starred Blocks Management**
-- Add "Starred Blocks" page (`/Home/StarredBlocks`)
-- Add "Starred" tab to user navigation
-- Show starred blocks in card layout similar to MyBlocks.cshtml
-- Add unstar functionality from starred blocks page
+#### Phase 2: Frontend Integration
+1. Create comment UI components
+2. Implement JavaScript MQTT client
+3. Add comment sections to block views
+4. Style and responsive design
 
-**Task 2.3: Star Indicators & Counts**
-- Update all block cards to show star status (starred by current user)
-- Add star count to block metadata displays
-- Show "You starred this" indicator where relevant
+#### Phase 3: Real-time Features
+1. MQTT message publishing on comment creation
+2. Real-time comment updates via MQTT subscription
+3. Handle connection failures and reconnection
+4. Optimize performance for multiple concurrent users
 
-### **Phase 3: Fork System UI**
+#### Phase 4: Polish & Security
+1. Add authentication checks
+2. Implement rate limiting
+3. Add input validation and sanitization
+4. Error handling and user feedback
+5. Testing and debugging
 
-**Task 3.1: Fork Button Implementation**
-- Add fork button to BlockDetail.cshtml for public blocks and user's own blocks
-- Add fork button to block cards in SharedBlocks.cshtml
-- Implement fork confirmation modal with name input (prefilled with "Fork of {original}")
-- Handle fork API call and redirect to new forked block
+### Technical Considerations
+- **MQTT Broker**: Consider using a cloud MQTT broker (e.g., HiveMQ, AWS IoT, Azure IoT Hub) or local broker
+- **Scalability**: Design for multiple concurrent users and high comment volume
+- **Performance**: Optimize database queries and MQTT message handling
+- **Fallback**: Ensure graceful degradation if MQTT is unavailable
+- **Security**: Implement proper authentication and authorization for MQTT topics
 
-**Task 3.2: Fork Relationship Display**
-- Show "Forked from" information in block metadata
-- Add link to original block in forked blocks
-- Show fork count and "View Forks" link in original blocks
-- Add fork tree/history view for complex fork chains
+### Dependencies
+- MQTTnet package for .NET
+- MQTT client library for JavaScript (mqtt.js)
+- Entity Framework Core for database operations
+- SignalR (alternative to MQTT if preferred)
 
-**Task 3.3: Forked Blocks Management**
-- Add "Forked Blocks" section to MyBlocks.cshtml or separate tab
-- Show blocks user has forked with links to originals
-- Show forks of user's blocks with links to fork details
-
-### **Phase 4: Enhanced User Experience**
-
-**Task 4.1: Block Detail Page Enhancements**
-- Add social proof section (X stars, Y forks, Z views)
-- Add "Users who starred this" modal
-- Add "Recent forks" section
-- Add owner profile link and basic stats
-
-**Task 4.2: User Profile & Social Features**
-- Add user profile page showing: public blocks, total stars received, fork activity
-- Add "Follow User" functionality (optional)
-- Add user activity feed (starred, forked, created blocks)
-
-**Task 4.3: Discoverability Features**
-- Add "You might like" recommendations based on starred/forked blocks
-- Add tag-based discovery ("More blocks like this")
-- Add "Popular in [tag]" sections
-- Implement block of the day/week feature
-
-### **Phase 5: Mobile & Responsive Enhancements**
-
-**Task 5.1: Mobile Optimization**
-- Optimize star/fork buttons for touch
-- Implement swipe gestures for quick actions
-- Add mobile-friendly block browser with filters
-- Optimize infinite scroll for mobile performance
-
-**Task 5.2: PWA Features** (Optional)
-- Add offline capability for starred blocks
-- Add push notifications for stars/forks of user's blocks
-- Add home screen installation prompt
+### Estimated Timeline
+- Phase 1: 2-3 days
+- Phase 2: 2-3 days  
+- Phase 3: 1-2 days
+- Phase 4: 1-2 days
+- **Total**: 6-10 days
 
 ---
+
+## Completed Tasks
+✅ Fork system implementation  
+✅ Fork information display  
+✅ Color scheme improvements  
+✅ Foreign key constraint resolution for block deletion

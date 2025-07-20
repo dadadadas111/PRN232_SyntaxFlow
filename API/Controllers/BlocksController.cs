@@ -359,49 +359,5 @@ namespace API.Controllers
                 return Unauthorized(new { message = ex.Message });
             }
         }
-
-        // Enhanced Block Management Endpoints
-
-        /// <summary>
-        /// Get trending blocks based on recent activity
-        /// </summary>
-        [HttpGet("trending")]
-        [AllowAnonymous]
-        public async Task<ActionResult<IEnumerable<BlockListResponse>>> GetTrendingBlocks(
-            [FromQuery] int days = 7,
-            [FromQuery] int page = 1,
-            [FromQuery] int size = 10)
-        {
-            var trendingBlocks = await _blockService.GetTrendingBlocksAsync(days, page, size);
-            return Ok(trendingBlocks);
-        }
-
-        /// <summary>
-        /// Track a view for a block (called when block is viewed/opened)
-        /// </summary>
-        [HttpPost("{id}/view")]
-        [AllowAnonymous]
-        public async Task<ActionResult> TrackBlockView(int id)
-        {
-            try
-            {
-                string? userId = null;
-                if (User.Identity?.IsAuthenticated == true)
-                {
-                    userId = GetCurrentUserId();
-                }
-
-                // Get client IP address
-                var ipAddress = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "127.0.0.1";
-
-                await _blockService.TrackBlockViewAsync(id, userId, ipAddress);
-                return Ok();
-            }
-            catch (Exception)
-            {
-                // Silently fail view tracking to not impact user experience
-                return Ok();
-            }
-        }
     }
 }
