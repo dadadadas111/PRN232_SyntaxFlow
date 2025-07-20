@@ -33,7 +33,7 @@ namespace Models
                 entity.HasOne(e => e.ForkedFrom)
                     .WithMany(e => e.Forks)
                     .HasForeignKey(e => e.ForkedFromId)
-                    .OnDelete(DeleteBehavior.SetNull);
+                    .OnDelete(DeleteBehavior.NoAction);
             });
 
             // Configure Tag entity
