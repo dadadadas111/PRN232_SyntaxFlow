@@ -20,6 +20,9 @@ builder.Services.AddIdentity<ApplicationUser, IdentityRole>()
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<ICodeTranslator, PythonCodeTranslator>();
 builder.Services.AddScoped<IBlockService, BlockService>();
+builder.Services.AddScoped<ICommentService, CommentService>();
+builder.Services.AddSingleton<IMqttService, MqttService>();
+builder.Services.AddHostedService<MqttService>(provider => (MqttService)provider.GetService<IMqttService>()!);
 
 builder.Services.AddAuthentication(options =>
 {

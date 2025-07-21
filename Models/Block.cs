@@ -43,5 +43,6 @@ namespace Models
         public virtual ICollection<Block> Forks { get; set; } = new List<Block>(); // Blocks forked from this one
         public virtual ICollection<BlockStar> Stars { get; set; } = new List<BlockStar>(); // Users who starred this block
         public virtual ICollection<BlockView> Views { get; set; } = new List<BlockView>(); // Users/anonymous who viewed this block
+        public virtual ICollection<Comment> Comments { get; set; } = new List<Comment>(); // Comments on this block
     }
 }
