@@ -71,6 +71,81 @@
     </div>
 </div>
 
+        </button>
+    </div>
+</div>
+
+<!-- Real-time Comments Section -->
+<div class="card mt-4">
+    <div class="card-header">
+        <div class="d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">
+                <i class="bi bi-chat-dots"></i> Comments
+                <span id="commentCount" class="badge bg-secondary ms-2">0</span>
+            </h5>
+            <div class="comment-controls">
+                <div class="d-flex align-items-center gap-2">
+                    <span class="text-muted small">Sort:</span>
+                    <select id="commentSort" class="form-select form-select-sm" style="width: auto;" onchange="updateCommentDisplay()">
+                        <option value="newest">Newest first</option>
+                        <option value="oldest">Oldest first</option>
+                    </select>
+                    <span class="text-muted small">Show:</span>
+                    <select id="commentLimit" class="form-select form-select-sm" style="width: auto;" onchange="updateCommentDisplay()">
+                        <option value="5">5 comments</option>
+                        <option value="10">10 comments</option>
+                        <option value="20">20 comments</option>
+                        <option value="all">All comments</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="card-body">
+        <!-- Comments List -->
+        <div id="commentsList">
+            <div id="commentsLoading" class="text-center py-3">
+                <div class="spinner-border spinner-border-sm" role="status">
+                    <span class="visually-hidden">Loading comments...</span>
+                </div>
+                <span class="ms-2">Loading comments...</span>
+            </div>
+            <div id="commentsEmpty" class="text-center text-muted py-4" style="display: none;">
+                <i class="bi bi-chat" style="font-size: 2rem;"></i>
+                <p class="mt-2 mb-0">No comments yet. Be the first to comment!</p>
+            </div>
+        </div>
+        
+        <!-- Show More Button -->
+        <div id="showMoreSection" class="text-center mt-3" style="display: none;">
+            <button id="showMoreBtn" class="btn btn-outline-secondary btn-sm" onclick="showMoreComments()">
+                <i class="bi bi-chevron-down"></i> Show more comments
+            </button>
+        </div>
+
+        <!-- Comment Input (only show if user is logged in) - Moved to bottom -->
+        <div id="commentInputSection" class="mt-4 pt-3 border-top" style="display: none;">
+            <div class="d-flex">
+                <div class="flex-grow-1 me-2">
+                    <textarea id="commentInput" class="form-control" placeholder="Write a comment..." rows="3" maxlength="1000"></textarea>
+                    <div class="form-text">
+                        <span id="commentCharCount">0</span>/1000 characters
+                    </div>
+                </div>
+                <div class="d-flex flex-column">
+                    <button id="submitComment" class="btn btn-primary mb-2" onclick="submitComment()" disabled>
+                        <i class="bi bi-send"></i> Comment
+                    </button>
+                    <button id="cancelComment" class="btn btn-outline-secondary btn-sm" onclick="cancelComment()" style="display: none;">
+                        Cancel
+                    </button>
+                </div>
+            </div>
+            <div id="commentStatus" class="mt-2"></div>
+        </div>
+    </div>
+</div>
+
 <!-- Update Block Modal -->
 <div class="modal fade" id="updateBlockModal" tabindex="-1" aria-labelledby="updateBlockModalLabel" aria-hidden="true">
   <div class="modal-dialog">
@@ -212,7 +287,9 @@ const toolbox = `
 `;
 
 document.addEventListener('DOMContentLoaded', function() {
+    // Initialize both block loading and comment system
     loadBlock();
+    initializeCommentSystem();
 });
 
 function loadBlock() {
@@ -936,9 +1013,912 @@ function escapeHtml(text) {
     div.textContent = text;
     return div.innerHTML;
 }
+
+// ===== REAL-TIME COMMENT SYSTEM =====
+let mqttClient = null;
+let comments = [];
+let editingCommentId = null;
+let displayedCommentsCount = 5; // Default to show 5 comments
+let allComments = []; // Store all comments for filtering/sorting
+
+function initializeCommentSystem() {
+    const jwt = localStorage.getItem("token");
+    
+    // Show comment input if user is logged in
+    if (jwt) {
+        document.getElementById('commentInputSection').style.display = 'block';
+        setupCommentInput();
+    }
+    
+    // Load existing comments
+    loadComments();
+    
+    // Initialize MQTT for real-time updates
+    initializeMQTT();
+}
+
+function setupCommentInput() {
+    const commentInput = document.getElementById('commentInput');
+    const charCount = document.getElementById('commentCharCount');
+    const submitBtn = document.getElementById('submitComment');
+    
+    commentInput.addEventListener('input', function() {
+        const length = this.value.length;
+        charCount.textContent = length;
+        charCount.className = length > 900 ? 'text-danger' : length > 700 ? 'text-warning' : 'text-muted';
+        submitBtn.disabled = length === 0 || length > 1000;
+    });
+    
+    commentInput.addEventListener('keydown', function(e) {
+        if (e.ctrlKey && e.key === 'Enter') {
+            e.preventDefault();
+            if (!submitBtn.disabled) {
+                submitComment();
+            }
+        }
+    });
+}
+
+async function loadComments() {
+    try {
+        const response = await fetch(`${apiBaseUrl}api/comments/block/${blockId}`, {
+            headers: {
+                'Authorization': localStorage.getItem("token") ? `Bearer ${localStorage.getItem("token")}` : ''
+            }
+        });
+        
+        if (response.ok) {
+            const rawComments = await response.json();
+            console.log('📥 Loaded comments from API:', rawComments);
+            
+            // Normalize comment objects to use camelCase for frontend consistency
+            allComments = rawComments.map(comment => ({
+                id: comment.id || comment.Id,
+                blockId: comment.blockId || comment.BlockId,
+                userId: comment.userId || comment.UserId,
+                userName: comment.userName || comment.UserName,
+                content: comment.content || comment.Content,
+                createdAt: comment.createdAt || comment.CreatedAt,
+                updatedAt: comment.updatedAt || comment.UpdatedAt,
+                isOwner: comment.isOwner || comment.IsOwner
+            }));
+            
+            // Keep the legacy comments array for backward compatibility
+            comments = [...allComments];
+            
+            console.log('✅ Normalized comments for frontend:', allComments);
+            displayComments();
+        } else {
+            throw new Error('Failed to load comments');
+        }
+    } catch (error) {
+        console.error('Error loading comments:', error);
+        const loadingEl = document.getElementById('commentsLoading');
+        if (loadingEl) {
+            loadingEl.innerHTML = 
+                '<div class="alert alert-danger">Failed to load comments. Please refresh the page.</div>';
+        }
+    }
+}
+
+function showMoreComments() {
+    const limitValue = document.getElementById('commentLimit')?.value || '5';
+    const increment = limitValue === 'all' ? allComments.length : parseInt(limitValue);
+    
+    // Increase the number of comments to display
+    displayedCommentsCount += increment;
+    
+    // Make sure we don't exceed total comments
+    if (displayedCommentsCount > allComments.length) {
+        displayedCommentsCount = allComments.length;
+    }
+    
+    // Update the display
+    updateCommentDisplay();
+    console.log(`📄 Now showing ${displayedCommentsCount} of ${allComments.length} comments`);
+}
+
+function displayComments() {
+    // For MQTT real-time updates, use a more direct approach if elements exist
+    const loadingEl = document.getElementById('commentsLoading');
+    const emptyEl = document.getElementById('commentsEmpty');
+    const listEl = document.getElementById('commentsList');
+    
+    if (loadingEl && emptyEl && listEl) {
+        // Elements exist, update immediately
+        updateCommentDisplay(loadingEl, emptyEl, listEl);
+        console.log('✅ Comments displayed immediately (elements found)');
+        return;
+    }
+    
+    // Elements not found, wait for them with retry mechanism
+    console.log('🔄 Comment DOM elements not immediately available, waiting...');
+    waitForCommentElements().then(() => {
+        const loadingEl = document.getElementById('commentsLoading');
+        const emptyEl = document.getElementById('commentsEmpty');
+        const listEl = document.getElementById('commentsList');
+        
+        updateCommentDisplay(loadingEl, emptyEl, listEl);
+        console.log('✅ Comments displayed after waiting');
+    }).catch(error => {
+        console.error('❌ Failed to display comments after waiting:', error);
+        
+        // Fallback: try to create a minimal comment display in the comment section
+        const commentCard = document.querySelector('.card .card-body');
+        if (commentCard) {
+            console.log('🔧 Attempting to recreate comment elements...');
+            recreateCommentElements(commentCard);
+        } else {
+            console.error('❌ Comment card not found, cannot display comments');
+        }
+    });
+}
+
+function updateCommentDisplay(loadingEl, emptyEl, listEl) {
+    if (!loadingEl || !emptyEl || !listEl) {
+        // Fallback for elements not provided
+        loadingEl = document.getElementById('commentsLoading');
+        emptyEl = document.getElementById('commentsEmpty');
+        listEl = document.getElementById('commentsList');
+    }
+    
+    if (!loadingEl || !emptyEl || !listEl) {
+        console.warn('⚠️ Comment display elements not found');
+        return;
+    }
+    
+    loadingEl.style.display = 'none';
+    
+    // Update comment count
+    const commentCountEl = document.getElementById('commentCount');
+    if (commentCountEl) {
+        commentCountEl.textContent = allComments.length;
+    }
+    
+    if (allComments.length === 0) {
+        emptyEl.style.display = 'block';
+        const showMoreSection = document.getElementById('showMoreSection');
+        if (showMoreSection) showMoreSection.style.display = 'none';
+        return;
+    }
+    
+    emptyEl.style.display = 'none';
+    
+    // Get sorting and limit preferences
+    const sortOrder = document.getElementById('commentSort')?.value || 'newest';
+    const limitValue = document.getElementById('commentLimit')?.value || '5';
+    
+    // Sort comments based on user preference (newest first by default)
+    let sortedComments;
+    if (sortOrder === 'newest') {
+        sortedComments = [...allComments].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    } else {
+        sortedComments = [...allComments].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+    }
+    
+    // Determine how many comments to show
+    let commentsToShow;
+    if (limitValue === 'all') {
+        commentsToShow = sortedComments;
+        displayedCommentsCount = sortedComments.length;
+    } else {
+        const limit = parseInt(limitValue);
+        commentsToShow = sortedComments.slice(0, displayedCommentsCount);
+    }
+    
+    // Show/hide "Show more" button
+    const showMoreSection = document.getElementById('showMoreSection');
+    const showMoreBtn = document.getElementById('showMoreBtn');
+    if (showMoreSection && showMoreBtn) {
+        const remaining = sortedComments.length - commentsToShow.length;
+        if (remaining > 0 && limitValue !== 'all') {
+            showMoreSection.style.display = 'block';
+            showMoreBtn.innerHTML = `<i class="bi bi-chevron-down"></i> Show ${remaining} more comments`;
+        } else {
+            showMoreSection.style.display = 'none';
+        }
+    }
+    
+    // Generate HTML for comments
+    const commentsHtml = commentsToShow.map(comment => createCommentHtml(comment)).join('');
+    listEl.innerHTML = commentsHtml;
+    
+    console.log(`✅ Displayed ${commentsToShow.length} of ${sortedComments.length} total comments (showing newest first)`);
+}
+
+function recreateCommentElements(commentCard) {
+    // Find existing comment list or create new one
+    let commentsList = document.getElementById('commentsList');
+    if (!commentsList) {
+        console.log('🔧 Creating missing commentsList element');
+        commentsList = document.createElement('div');
+        commentsList.id = 'commentsList';
+        commentCard.appendChild(commentsList);
+    }
+    
+    // Create missing elements
+    if (!document.getElementById('commentsLoading')) {
+        const loadingEl = document.createElement('div');
+        loadingEl.id = 'commentsLoading';
+        loadingEl.className = 'text-center py-3';
+        loadingEl.style.display = 'none'; // Hide loading since we're past that
+        commentsList.appendChild(loadingEl);
+    }
+    
+    if (!document.getElementById('commentsEmpty')) {
+        const emptyEl = document.createElement('div');
+        emptyEl.id = 'commentsEmpty';
+        emptyEl.className = 'text-center text-muted py-4';
+        emptyEl.innerHTML = `
+            <i class="bi bi-chat" style="font-size: 2rem;"></i>
+            <p class="mt-2 mb-0">No comments yet. Be the first to comment!</p>
+        `;
+        commentsList.appendChild(emptyEl);
+    }
+    
+    // Now try to display comments again
+    const loadingEl = document.getElementById('commentsLoading');
+    const emptyEl = document.getElementById('commentsEmpty');
+    const listEl = document.getElementById('commentsList');
+    
+    if (loadingEl && emptyEl && listEl) {
+        updateCommentDisplay(loadingEl, emptyEl, listEl);
+        console.log('✅ Comments displayed after recreating elements');
+    } else {
+        console.error('❌ Still could not create comment elements, trying emergency fallback...');
+        emergencyCommentDisplay(commentCard);
+    }
+}
+
+function emergencyCommentDisplay(commentCard) {
+    console.log('🚨 Emergency comment display - adding comment directly to card');
+    
+    // Create a simple comment display as last resort
+    const emergencyContainer = document.createElement('div');
+    emergencyContainer.id = 'emergencyComments';
+    emergencyContainer.className = 'mt-3';
+    emergencyContainer.innerHTML = `
+        <h6>Comments (${comments.length})</h6>
+        <div id="emergencyCommentList"></div>
+    `;
+    
+    // Remove any existing emergency container
+    const existingEmergency = document.getElementById('emergencyComments');
+    if (existingEmergency) {
+        existingEmergency.remove();
+    }
+    
+    commentCard.appendChild(emergencyContainer);
+    
+    // Display comments in emergency container
+    const emergencyList = document.getElementById('emergencyCommentList');
+    if (emergencyList && comments.length > 0) {
+        const sortedComments = [...comments].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+        const commentsHtml = sortedComments.map(comment => createCommentHtml(comment)).join('');
+        emergencyList.innerHTML = commentsHtml;
+        console.log('✅ Emergency comment display successful');
+    } else if (emergencyList) {
+        emergencyList.innerHTML = '<p class="text-muted">No comments yet.</p>';
+    }
+}
+
+// Helper function to wait for comment DOM elements to be available
+function waitForCommentElements(maxRetries = 10, delay = 200) {
+    return new Promise((resolve, reject) => {
+        let retries = 0;
+        
+        function checkElements() {
+            console.log(`🔍 Checking for comment DOM elements... attempt ${retries + 1}/${maxRetries}`);
+            
+            const loadingEl = document.getElementById('commentsLoading');
+            const emptyEl = document.getElementById('commentsEmpty');
+            const listEl = document.getElementById('commentsList');
+            
+            // More detailed logging
+            console.log('DOM element search results:', {
+                commentsLoading: loadingEl ? 'FOUND' : 'NOT FOUND',
+                commentsEmpty: emptyEl ? 'FOUND' : 'NOT FOUND', 
+                commentsList: listEl ? 'FOUND' : 'NOT FOUND',
+                documentReady: document.readyState,
+                bodyHasElements: document.body.children.length
+            });
+            
+            if (loadingEl && emptyEl && listEl) {
+                console.log('✅ Comment DOM elements found after', retries, 'retries');
+                resolve();
+                return;
+            }
+            
+            retries++;
+            if (retries >= maxRetries) {
+                console.error('❌ Comment DOM elements still not found after retries');
+                
+                // Detailed investigation
+                const commentCard = document.querySelector('.card');
+                const commentHeaders = document.querySelectorAll('h5');
+                const hasCommentHeader = Array.from(commentHeaders).some(h => h.textContent.includes('Comments'));
+                
+                console.error('Final DOM investigation:', {
+                    totalCards: document.querySelectorAll('.card').length,
+                    hasCommentHeader: hasCommentHeader,
+                    allIdsInPage: Array.from(document.querySelectorAll('[id]')).map(el => el.id),
+                    commentCardExists: !!commentCard
+                });
+                
+                reject(new Error(`Comment DOM elements not found after ${maxRetries} retries`));
+                return;
+            }
+            
+            console.log(`🔄 Retrying in ${delay}ms... (${retries}/${maxRetries})`);
+            setTimeout(checkElements, delay);
+        }
+        
+        // Start checking immediately
+        checkElements();
+    });
+}
+
+function createCommentHtml(comment) {
+    const jwt = localStorage.getItem("token");
+    const currentUserId = jwt ? JSON.parse(atob(jwt.split('.')[1])).nameid : null;
+    const isOwner = currentUserId && currentUserId === comment.userId.toString();
+    
+    // Parse dates and format them in local timezone
+    const createdAt = new Date(comment.createdAt);
+    const updatedAt = new Date(comment.updatedAt);
+    const isEdited = Math.abs(createdAt.getTime() - updatedAt.getTime()) > 1000; // More than 1 second difference
+    
+    // Format dates in local timezone with relative time
+    const formatDate = (date) => {
+        const now = new Date();
+        const diffInSeconds = Math.floor((now - date) / 1000);
+        
+        if (diffInSeconds < 60) return 'Just now';
+        if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m ago`;
+        if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h ago`;
+        if (diffInSeconds < 604800) return `${Math.floor(diffInSeconds / 86400)}d ago`;
+        
+        // For older comments, show the full date in local timezone
+        return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    };
+    
+    return `
+        <div class="comment mb-3 p-3 border rounded" data-comment-id="${comment.id}">
+            <div class="d-flex justify-content-between align-items-start mb-2">
+                <div class="d-flex align-items-center">
+                    <strong class="me-2">${escapeHtml(comment.userName)}</strong>
+                    <small class="text-muted" title="${createdAt.toLocaleString()}">
+                        ${formatDate(createdAt)}
+                        ${isEdited ? `<i class="bi bi-pencil ms-1" title="Edited ${formatDate(updatedAt)}"></i>` : ''}
+                    </small>
+                </div>
+                ${isOwner ? `
+                    <div class="dropdown">
+                        <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                            <i class="bi bi-three-dots"></i>
+                        </button>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item" href="#" onclick="editComment(${comment.id})">
+                                <i class="bi bi-pencil"></i> Edit
+                            </a></li>
+                            <li><a class="dropdown-item text-danger" href="#" onclick="deleteComment(${comment.id})">
+                                <i class="bi bi-trash"></i> Delete
+                            </a></li>
+                        </ul>
+                    </div>
+                ` : ''}
+            </div>
+            <div class="comment-content">
+                <p class="mb-0 comment-text">${escapeHtml(comment.content).replace(/\n/g, '<br>')}</p>
+                <div class="comment-edit-form" style="display: none;">
+                    <textarea class="form-control mb-2" rows="3" maxlength="1000">${escapeHtml(comment.content)}</textarea>
+                    <div class="d-flex justify-content-end">
+                        <button class="btn btn-sm btn-outline-secondary me-2" onclick="cancelEditComment(${comment.id})">Cancel</button>
+                        <button class="btn btn-sm btn-primary" onclick="saveEditComment(${comment.id})">Save</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+async function submitComment() {
+    const jwt = localStorage.getItem("token");
+    if (!jwt) {
+        alert('Please login to comment');
+        return;
+    }
+    
+    const content = document.getElementById('commentInput').value.trim();
+    if (!content) return;
+    
+    const submitBtn = document.getElementById('submitComment');
+    const originalText = submitBtn.innerHTML;
+    submitBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> Posting...';
+    submitBtn.disabled = true;
+    
+    try {
+        const response = await fetch(`${apiBaseUrl}api/comments`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${jwt}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                blockId: blockId,
+                content: content
+            })
+        });
+        
+        if (response.ok) {
+            document.getElementById('commentInput').value = '';
+            document.getElementById('commentCharCount').textContent = '0';
+            document.getElementById('commentStatus').innerHTML = 
+                '<div class="alert alert-success alert-dismissible fade show" role="alert">Comment posted successfully!</div>';
+            
+            // Clear success message after 3 seconds
+            setTimeout(() => {
+                const alert = document.querySelector('#commentStatus .alert');
+                if (alert) alert.remove();
+            }, 3000);
+            
+            // Auto-scroll to bottom after a short delay to ensure the comment appears
+            setTimeout(() => {
+                scrollToBottomOfComments();
+            }, 500);
+        } else {
+            throw new Error('Failed to post comment');
+        }
+    } catch (error) {
+        console.error('Error posting comment:', error);
+        document.getElementById('commentStatus').innerHTML = 
+            '<div class="alert alert-danger">Failed to post comment. Please try again.</div>';
+    } finally {
+        submitBtn.innerHTML = originalText;
+        submitBtn.disabled = false;
+    }
+}
+
+function scrollToBottomOfComments() {
+    const commentsList = document.getElementById('commentsList') || document.getElementById('emergencyCommentList');
+    if (commentsList) {
+        // Find the last comment element
+        const comments = commentsList.querySelectorAll('.comment, [data-comment-id]');
+        if (comments.length > 0) {
+            const lastComment = comments[comments.length - 1];
+            lastComment.scrollIntoView({ 
+                behavior: 'smooth', 
+                block: 'end' 
+            });
+            console.log('📍 Auto-scrolled to bottom of comments');
+        } else {
+            // Fallback: scroll the comments list container
+            commentsList.scrollTop = commentsList.scrollHeight;
+        }
+    }
+}
+
+function editComment(commentId) {
+    const commentEl = document.querySelector(`[data-comment-id="${commentId}"]`);
+    const textEl = commentEl.querySelector('.comment-text');
+    const editEl = commentEl.querySelector('.comment-edit-form');
+    
+    textEl.style.display = 'none';
+    editEl.style.display = 'block';
+    editEl.querySelector('textarea').focus();
+    editingCommentId = commentId;
+}
+
+function cancelEditComment(commentId) {
+    const commentEl = document.querySelector(`[data-comment-id="${commentId}"]`);
+    const textEl = commentEl.querySelector('.comment-text');
+    const editEl = commentEl.querySelector('.comment-edit-form');
+    
+    textEl.style.display = 'block';
+    editEl.style.display = 'none';
+    editingCommentId = null;
+}
+
+async function saveEditComment(commentId) {
+    const jwt = localStorage.getItem("token");
+    if (!jwt) {
+        alert('Please login to edit comments');
+        return;
+    }
+    
+    const commentEl = document.querySelector(`[data-comment-id="${commentId}"]`);
+    const textarea = commentEl.querySelector('textarea');
+    const content = textarea.value.trim();
+    
+    if (!content) {
+        alert('Comment cannot be empty');
+        return;
+    }
+    
+    const saveBtn = commentEl.querySelector('.btn-primary');
+    const originalText = saveBtn.innerHTML;
+    saveBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> Saving...';
+    saveBtn.disabled = true;
+    
+    try {
+        const response = await fetch(`${apiBaseUrl}api/comments/${commentId}`, {
+            method: 'PUT',
+            headers: {
+                'Authorization': `Bearer ${jwt}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                content: content
+            })
+        });
+        
+        if (response.ok) {
+            cancelEditComment(commentId);
+        } else {
+            throw new Error('Failed to update comment');
+        }
+    } catch (error) {
+        console.error('Error updating comment:', error);
+        alert('Failed to update comment. Please try again.');
+    } finally {
+        saveBtn.innerHTML = originalText;
+        saveBtn.disabled = false;
+    }
+}
+
+async function deleteComment(commentId) {
+    if (!confirm('Are you sure you want to delete this comment? This action cannot be undone.')) {
+        return;
+    }
+    
+    const jwt = localStorage.getItem("token");
+    if (!jwt) {
+        alert('Please login to delete comments');
+        return;
+    }
+    
+    try {
+        const response = await fetch(`${apiBaseUrl}api/comments/${commentId}`, {
+            method: 'DELETE',
+            headers: {
+                'Authorization': `Bearer ${jwt}`
+            }
+        });
+        
+        if (response.ok) {
+            // Comment will be removed via MQTT real-time update
+        } else {
+            throw new Error('Failed to delete comment');
+        }
+    } catch (error) {
+        console.error('Error deleting comment:', error);
+        alert('Failed to delete comment. Please try again.');
+    }
+}
+
+function cancelComment() {
+    document.getElementById('commentInput').value = '';
+    document.getElementById('commentCharCount').textContent = '0';
+    document.getElementById('submitComment').disabled = true;
+}
+
+// ===== MQTT REAL-TIME UPDATES =====
+function initializeMQTT() {
+    try {
+        // Generate unique client ID
+        const clientId = `SyntaxFlow_Client_${Math.random().toString(36).substr(2, 9)}`;
+        
+        // Connect to MQTT broker using secure WebSocket for HTTPS pages
+        const brokerUrl = location.protocol === 'https:' ? 'wss://broker.emqx.io:8084/mqtt' : 'ws://broker.emqx.io:8083/mqtt';
+        
+        console.log(`🔄 Initializing MQTT connection:`, {
+            protocol: location.protocol,
+            brokerUrl: brokerUrl,
+            clientId: clientId,
+            blockId: blockId
+        });
+        
+        // Check if mqtt library is available
+        if (typeof mqtt === 'undefined') {
+            console.warn('⚠️ MQTT library not loaded, skipping real-time updates');
+            return;
+        }
+        
+        mqttClient = mqtt.connect(brokerUrl, {
+            clientId: clientId,
+            clean: true,
+            connectTimeout: 10000,
+            reconnectPeriod: 5000
+        });
+        
+        mqttClient.on('connect', onMQTTConnect);
+        mqttClient.on('error', onMQTTError);
+        mqttClient.on('close', onMQTTConnectionLost);
+        mqttClient.on('message', onMQTTMessageArrived);
+        
+    } catch (error) {
+        console.error('❌ Error initializing MQTT:', error);
+        // Continue without real-time updates
+    }
+}
+
+function onMQTTConnect() {
+    console.log('✅ Connected to MQTT broker for real-time comments');
+    
+    // Subscribe to comment topics for this block
+    const blockTopic = `syntaxflow/comments/${blockId}`;
+    const deleteTopic = 'syntaxflow/comments/deleted';
+    
+    console.log(`📡 Subscribing to topics: ${blockTopic} and ${deleteTopic}`);
+    
+    mqttClient.subscribe(blockTopic, (err) => {
+        if (err) {
+            console.error('❌ Failed to subscribe to block topic:', err);
+        } else {
+            console.log(`✅ Subscribed to: ${blockTopic}`);
+        }
+    });
+    
+    mqttClient.subscribe(deleteTopic, (err) => {
+        if (err) {
+            console.error('❌ Failed to subscribe to delete topic:', err);
+        } else {
+            console.log(`✅ Subscribed to: ${deleteTopic}`);
+        }
+    });
+}
+
+function onMQTTError(error) {
+    console.warn('⚠️ MQTT connection error:', error);
+    // Continue without real-time updates
+}
+
+function onMQTTConnectionLost() {
+    console.warn('🔌 MQTT connection lost, will attempt to reconnect automatically');
+    // mqtt.js handles reconnection automatically
+}
+
+function onMQTTMessageArrived(topic, message) {
+    try {
+        const payload = JSON.parse(message.toString());
+        console.log('📥 Received MQTT message:', {
+            topic: topic,
+            action: payload.action,
+            payload: payload
+        });
+        
+        switch (payload.action) {
+            case 'create':
+                console.log('🆕 Handling new comment:', payload.comment);
+                handleNewComment(payload.comment);
+                break;
+            case 'update':
+                console.log('✏️ Handling comment update:', payload.comment);
+                handleUpdatedComment(payload.comment);
+                break;
+            case 'delete':
+                console.log('🗑️ Handling comment deletion:', payload.commentId);
+                handleDeletedComment(payload.commentId);
+                break;
+            default:
+                console.warn('❓ Unknown MQTT action:', payload.action);
+        }
+    } catch (error) {
+        console.error('❌ Error processing MQTT message:', error);
+    }
+}
+
+function handleNewComment(comment) {
+    // Handle both camelCase and PascalCase property names for backward compatibility
+    const commentBlockId = comment.blockId || comment.BlockId;
+    const commentId = comment.id || comment.Id;
+    
+    console.log(`🔍 Processing new comment:`, {
+        comment: comment,
+        extractedBlockId: commentBlockId,
+        extractedId: commentId,
+        currentBlockId: blockId
+    });
+    
+    // Only add if it's for this block and not already in the list
+    if (commentBlockId === blockId && !allComments.find(c => (c.id || c.Id) === commentId)) {
+        console.log(`➕ Adding new comment to UI - CommentId: ${commentId}, BlockId: ${commentBlockId}`);
+        
+        // Normalize the comment object to use camelCase for frontend consistency
+        const normalizedComment = {
+            id: commentId,
+            blockId: commentBlockId,
+            userId: comment.userId || comment.UserId,
+            userName: comment.userName || comment.UserName,
+            content: comment.content || comment.Content,
+            createdAt: comment.createdAt || comment.CreatedAt,
+            updatedAt: comment.updatedAt || comment.UpdatedAt,
+            isOwner: comment.isOwner || comment.IsOwner
+        };
+        
+        // Add to both arrays for consistency
+        allComments.push(normalizedComment);
+        comments.push(normalizedComment);
+        
+        // Debug: Check DOM state when MQTT message arrives
+        console.log('🔧 DOM state at MQTT message time:', {
+            readyState: document.readyState,
+            hasCommentsList: !!document.getElementById('commentsList'),
+            hasCommentsLoading: !!document.getElementById('commentsLoading'),
+            hasCommentsEmpty: !!document.getElementById('commentsEmpty'),
+            allCommentElements: document.querySelectorAll('[id*="comment"]').length,
+            totalElementsWithId: document.querySelectorAll('[id]').length
+        });
+        
+        // Try immediate display first, then fallback to waiting
+        displayComments();
+        
+        // Highlight the new comment after a short delay
+        setTimeout(() => highlightNewComment(commentId), 100);
+        
+        // Show notification with scroll functionality
+        showCommentNotification('New comment added', 'success', commentId);
+    } else {
+        console.log(`⚠️ Skipping comment - wrong block or already exists:`, {
+            commentBlockId: commentBlockId,
+            currentBlockId: blockId,
+            alreadyExists: !!allComments.find(c => (c.id || c.Id) === commentId),
+            blockIdMatch: commentBlockId === blockId
+        });
+    }
+}
+
+function handleUpdatedComment(comment) {
+    // Handle both camelCase and PascalCase property names from backend
+    const commentBlockId = comment.blockId || comment.BlockId;
+    const commentId = comment.id || comment.Id;
+    
+    if (commentBlockId === blockId) {
+        // Update in both arrays
+        const allIndex = allComments.findIndex(c => (c.id || c.Id) === commentId);
+        const commentsIndex = comments.findIndex(c => (c.id || c.Id) === commentId);
+        
+        if (allIndex !== -1 || commentsIndex !== -1) {
+            console.log(`✏️ Updating comment in UI - CommentId: ${commentId}, BlockId: ${commentBlockId}`);
+            
+            // Normalize the comment object to use camelCase for frontend consistency
+            const normalizedComment = {
+                id: commentId,
+                blockId: commentBlockId,
+                userId: comment.userId || comment.UserId,
+                userName: comment.userName || comment.UserName,
+                content: comment.content || comment.Content,
+                createdAt: comment.createdAt || comment.CreatedAt,
+                updatedAt: comment.updatedAt || comment.UpdatedAt,
+                isOwner: comment.isOwner || comment.IsOwner
+            };
+            
+            if (allIndex !== -1) allComments[allIndex] = normalizedComment;
+            if (commentsIndex !== -1) comments[commentsIndex] = normalizedComment;
+            
+            displayComments();
+            showCommentNotification('Comment updated', 'info');
+        } else {
+            console.warn(`⚠️ Comment to update not found - CommentId: ${commentId}`);
+        }
+    } else {
+        console.log(`⚠️ Ignoring comment update for different block - CommentBlockId: ${commentBlockId}, CurrentBlockId: ${blockId}`);
+    }
+}
+
+function handleDeletedComment(commentId) {
+    // Remove from both arrays
+    const allIndex = allComments.findIndex(c => c.id === commentId);
+    const commentsIndex = comments.findIndex(c => c.id === commentId);
+    
+    if (allIndex !== -1 || commentsIndex !== -1) {
+        console.log(`🗑️ Removing comment from UI - CommentId: ${commentId}`);
+        
+        if (allIndex !== -1) allComments.splice(allIndex, 1);
+        if (commentsIndex !== -1) comments.splice(commentsIndex, 1);
+        
+        displayComments();
+        showCommentNotification('Comment deleted', 'warning');
+    } else {
+        console.log(`⚠️ Comment to delete not found in local list - CommentId: ${commentId}`);
+    }
+}
+
+function showCommentNotification(message, type, commentId = null) {
+    const notification = document.createElement('div');
+    notification.className = `alert alert-${type} alert-dismissible fade show position-fixed`;
+    notification.style.cssText = 'top: 20px; right: 20px; z-index: 1050; min-width: 250px;';
+    
+    // Make notification clickable if commentId is provided
+    const clickableClass = commentId ? 'cursor-pointer' : '';
+    const clickableTitle = commentId ? 'Click to scroll to comment' : '';
+    
+    notification.innerHTML = `
+        <div class="${clickableClass}" title="${clickableTitle}">
+            ${message}
+            ${commentId ? '<br><small class="text">Click to scroll to comment</small>' : ''}
+        </div>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="alert"></button>
+    `;
+    
+    // Add click handler to scroll to comment
+    if (commentId) {
+        notification.style.cursor = 'pointer';
+        notification.addEventListener('click', (e) => {
+            // Don't trigger on close button click
+            if (!e.target.classList.contains('btn-close')) {
+                scrollToComment(commentId);
+                // Dismiss notification after clicking
+                notification.remove();
+            }
+        });
+    }
+    
+    document.body.appendChild(notification);
+    
+    // Auto-remove after 5 seconds (increased from 3 to give more time to click)
+    setTimeout(() => {
+        if (notification.parentNode) {
+            notification.remove();
+        }
+    }, 5000);
+}
+
+function scrollToComment(commentId) {
+    const commentElement = document.querySelector(`[data-comment-id="${commentId}"]`);
+    if (commentElement) {
+        // Scroll to the comment with smooth behavior
+        commentElement.scrollIntoView({ 
+            behavior: 'smooth', 
+            block: 'center' 
+        });
+        
+        // Highlight the comment briefly
+        highlightNewComment(commentId);
+        
+        console.log(`📍 Scrolled to comment ${commentId}`);
+    } else {
+        console.warn(`⚠️ Comment element not found for ID: ${commentId}`);
+    }
+}
+
+function highlightNewComment(commentId) {
+    const commentElement = document.querySelector(`[data-comment-id="${commentId}"]`);
+    if (commentElement) {
+        // Add highlight class with animation
+        commentElement.style.transition = 'background-color 0.3s ease';
+        commentElement.style.backgroundColor = '#fff3cd'; // Light yellow highlight
+        commentElement.style.border = '2px solid #ffc107'; // Yellow border
+        
+        // Remove highlight after 3 seconds
+        setTimeout(() => {
+            commentElement.style.backgroundColor = '';
+            commentElement.style.border = '1px solid #dee2e6'; // Original border
+            
+            // Remove transition after animation
+            setTimeout(() => {
+                commentElement.style.transition = '';
+            }, 300);
+        }, 3000);
+        
+        console.log(`✨ Highlighted comment ${commentId}`);
+    } else {
+        console.warn(`⚠️ Could not highlight comment: element not found for ID ${commentId}`);
+    }
+}
+
+// Clean up MQTT connection when page unloads
+window.addEventListener('beforeunload', function() {
+    if (mqttClient && mqttClient.connected) {
+        mqttClient.end();
+    }
+});
 </script>
 
 <!-- Bootstrap Icons -->
 <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+<!-- MQTT Client for real-time comments -->
+<script src="https://unpkg.com/mqtt@5.0.5/dist/mqtt.min.js"></script>

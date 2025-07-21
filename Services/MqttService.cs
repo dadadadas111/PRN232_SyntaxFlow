@@ -24,27 +24,33 @@ namespace Services
         {
             try
             {
+                var server = _configuration["Mqtt:Server"] ?? "broker.emqx.io";
+                var port = int.Parse(_configuration["Mqtt:Port"] ?? "1883");
+                var clientId = $"SyntaxFlow_Server_{Environment.MachineName}_{Guid.NewGuid():N}";
+                
+                _logger.LogInformation("Starting MQTT Service - Server: {Server}, Port: {Port}, ClientId: {ClientId}", 
+                    server, port, clientId);
+
                 // Create MQTT client using the static factory method
                 _mqttClient = new MqttClientFactory().CreateMqttClient();
 
                 // Configure MQTT options
                 _options = new MqttClientOptionsBuilder()
-                    .WithTcpServer(_configuration["Mqtt:Server"] ?? "broker.emqx.io", 
-                                   int.Parse(_configuration["Mqtt:Port"] ?? "1883"))
-                    .WithClientId($"SyntaxFlow_Server_{Environment.MachineName}_{Guid.NewGuid():N}")
+                    .WithTcpServer(server, port)
+                    .WithClientId(clientId)
                     .WithCleanSession()
                     .Build();
 
                 // Setup event handlers
                 _mqttClient.ConnectedAsync += (args) =>
                 {
-                    _logger.LogInformation("MQTT Client connected successfully");
+                    _logger.LogInformation("✅ MQTT Client connected successfully to {Server}:{Port}", server, port);
                     return Task.CompletedTask;
                 };
 
                 _mqttClient.DisconnectedAsync += async (args) =>
                 {
-                    _logger.LogWarning("MQTT Client disconnected: {Reason}", args.Reason);
+                    _logger.LogWarning("❌ MQTT Client disconnected: {Reason}", args.Reason);
                     
                     // Try to reconnect after 5 seconds
                     await Task.Delay(5000, cancellationToken);
@@ -62,12 +68,13 @@ namespace Services
                 };
 
                 // Connect to MQTT broker
+                _logger.LogInformation("🔄 Connecting to MQTT broker...");
                 await _mqttClient.ConnectAsync(_options, cancellationToken);
-                _logger.LogInformation("MQTT Service started and connected to broker");
+                _logger.LogInformation("✅ MQTT Service started and connected to broker");
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to start MQTT service");
+                _logger.LogError(ex, "❌ Failed to start MQTT service");
                 // Don't throw here - let the service start anyway for graceful degradation
             }
 
@@ -124,7 +131,7 @@ namespace Services
             {
                 if (_mqttClient?.IsConnected != true)
                 {
-                    _logger.LogWarning("MQTT client not connected, skipping comment publish");
+                    _logger.LogWarning("🔌 MQTT client not connected, skipping comment publish for comment ID: {CommentId}", comment.Id);
                     return;
                 }
 
@@ -136,18 +143,27 @@ namespace Services
                     timestamp = DateTime.UtcNow
                 };
 
+                var payloadJson = JsonSerializer.Serialize(payload, new JsonSerializerOptions
+                {
+                    PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+                    DictionaryKeyPolicy = JsonNamingPolicy.CamelCase
+                });
+                _logger.LogInformation("📤 Publishing new comment to MQTT - Topic: {Topic}, CommentId: {CommentId}, BlockId: {BlockId}", 
+                    topic, comment.Id, comment.BlockId);
+                _logger.LogDebug("📤 MQTT Payload: {Payload}", payloadJson);
+
                 var message = new MqttApplicationMessageBuilder()
                     .WithTopic(topic)
-                    .WithPayload(JsonSerializer.Serialize(payload))
+                    .WithPayload(payloadJson)
                     .WithQualityOfServiceLevel(MQTTnet.Protocol.MqttQualityOfServiceLevel.AtLeastOnce)
                     .Build();
 
                 await _mqttClient.PublishAsync(message);
-                _logger.LogDebug("Published new comment to MQTT topic: {Topic}", topic);
+                _logger.LogInformation("✅ Successfully published new comment to MQTT topic: {Topic}", topic);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to publish comment to MQTT");
+                _logger.LogError(ex, "❌ Failed to publish comment to MQTT - CommentId: {CommentId}", comment.Id);
             }
         }
 
@@ -157,7 +173,7 @@ namespace Services
             {
                 if (_mqttClient?.IsConnected != true)
                 {
-                    _logger.LogWarning("MQTT client not connected, skipping comment update publish");
+                    _logger.LogWarning("🔌 MQTT client not connected, skipping comment update publish for comment ID: {CommentId}", comment.Id);
                     return;
                 }
 
@@ -169,18 +185,27 @@ namespace Services
                     timestamp = DateTime.UtcNow
                 };
 
+                var payloadJson = JsonSerializer.Serialize(payload, new JsonSerializerOptions
+                {
+                    PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+                    DictionaryKeyPolicy = JsonNamingPolicy.CamelCase
+                });
+                _logger.LogInformation("📤 Publishing comment update to MQTT - Topic: {Topic}, CommentId: {CommentId}, BlockId: {BlockId}", 
+                    topic, comment.Id, comment.BlockId);
+                _logger.LogDebug("📤 MQTT Payload: {Payload}", payloadJson);
+
                 var message = new MqttApplicationMessageBuilder()
                     .WithTopic(topic)
-                    .WithPayload(JsonSerializer.Serialize(payload))
+                    .WithPayload(payloadJson)
                     .WithQualityOfServiceLevel(MQTTnet.Protocol.MqttQualityOfServiceLevel.AtLeastOnce)
                     .Build();
 
                 await _mqttClient.PublishAsync(message);
-                _logger.LogDebug("Published comment update to MQTT topic: {Topic}", topic);
+                _logger.LogInformation("✅ Successfully published comment update to MQTT topic: {Topic}", topic);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to publish comment update to MQTT");
+                _logger.LogError(ex, "❌ Failed to publish comment update to MQTT - CommentId: {CommentId}", comment.Id);
             }
         }
 
@@ -190,7 +215,7 @@ namespace Services
             {
                 if (_mqttClient?.IsConnected != true)
                 {
-                    _logger.LogWarning("MQTT client not connected, skipping comment delete publish");
+                    _logger.LogWarning("🔌 MQTT client not connected, skipping comment delete publish for comment ID: {CommentId}", commentId);
                     return;
                 }
 
@@ -203,18 +228,27 @@ namespace Services
                     timestamp = DateTime.UtcNow
                 };
 
+                var payloadJson = JsonSerializer.Serialize(payload, new JsonSerializerOptions
+                {
+                    PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+                    DictionaryKeyPolicy = JsonNamingPolicy.CamelCase
+                });
+                _logger.LogInformation("📤 Publishing comment deletion to MQTT - Topic: {Topic}, CommentId: {CommentId}", 
+                    topic, commentId);
+                _logger.LogDebug("📤 MQTT Payload: {Payload}", payloadJson);
+
                 var message = new MqttApplicationMessageBuilder()
                     .WithTopic(topic)
-                    .WithPayload(JsonSerializer.Serialize(payload))
+                    .WithPayload(payloadJson)
                     .WithQualityOfServiceLevel(MQTTnet.Protocol.MqttQualityOfServiceLevel.AtLeastOnce)
                     .Build();
 
                 await _mqttClient.PublishAsync(message);
-                _logger.LogDebug("Published comment deletion to MQTT topic: {Topic}", topic);
+                _logger.LogInformation("✅ Successfully published comment deletion to MQTT topic: {Topic}", topic);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to publish comment deletion to MQTT");
+                _logger.LogError(ex, "❌ Failed to publish comment deletion to MQTT - CommentId: {CommentId}", commentId);
             }
         }
     }

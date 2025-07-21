@@ -18,11 +18,13 @@ namespace API.Controllers
     {
         private readonly ICommentService _commentService;
         private readonly IMqttService _mqttService;
+        private readonly ILogger<CommentsController> _logger;
 
-        public CommentsController(ICommentService commentService, IMqttService mqttService)
+        public CommentsController(ICommentService commentService, IMqttService mqttService, ILogger<CommentsController> logger)
         {
             _commentService = commentService;
             _mqttService = mqttService;
+            _logger = logger;
         }
 
         private string GetCurrentUserId()
@@ -107,12 +109,14 @@ namespace API.Controllers
                 {
                     try
                     {
+                        _logger.LogInformation("🚀 Triggering MQTT publish for new comment - CommentId: {CommentId}, BlockId: {BlockId}", 
+                            comment.Id, comment.BlockId);
                         await _mqttService.PublishCommentAsync(comment);
                     }
                     catch (Exception ex)
                     {
                         // Log error but don't fail the request
-                        Console.WriteLine($"MQTT publish failed: {ex.Message}");
+                        _logger.LogError(ex, "❌ MQTT publish failed for new comment - CommentId: {CommentId}", comment.Id);
                     }
                 });
 
@@ -164,12 +168,14 @@ namespace API.Controllers
                 {
                     try
                     {
+                        _logger.LogInformation("🚀 Triggering MQTT publish for comment update - CommentId: {CommentId}, BlockId: {BlockId}", 
+                            comment.Id, comment.BlockId);
                         await _mqttService.PublishCommentUpdateAsync(comment);
                     }
                     catch (Exception ex)
                     {
                         // Log error but don't fail the request
-                        Console.WriteLine($"MQTT publish failed: {ex.Message}");
+                        _logger.LogError(ex, "❌ MQTT publish failed for comment update - CommentId: {CommentId}", comment.Id);
                     }
                 });
 
@@ -212,12 +218,13 @@ namespace API.Controllers
                 {
                     try
                     {
+                        _logger.LogInformation("🚀 Triggering MQTT publish for comment deletion - CommentId: {CommentId}", id);
                         await _mqttService.PublishCommentDeleteAsync(id);
                     }
                     catch (Exception ex)
                     {
                         // Log error but don't fail the request
-                        Console.WriteLine($"MQTT publish failed: {ex.Message}");
+                        _logger.LogError(ex, "❌ MQTT publish failed for comment deletion - CommentId: {CommentId}", id);
                     }
                 });
 
