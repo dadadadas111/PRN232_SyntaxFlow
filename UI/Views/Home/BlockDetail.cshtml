@@ -86,12 +86,12 @@
             <div class="comment-controls">
                 <div class="d-flex align-items-center gap-2">
                     <span class="text-muted small">Sort:</span>
-                    <select id="commentSort" class="form-select form-select-sm" style="width: auto;" onchange="updateCommentDisplay()">
+                    <select id="commentSort" class="form-select form-select-sm" style="width: auto;" onchange="displayedCommentsCount = 5; updateCommentDisplay()">
                         <option value="newest">Newest first</option>
                         <option value="oldest">Oldest first</option>
                     </select>
                     <span class="text-muted small">Show:</span>
-                    <select id="commentLimit" class="form-select form-select-sm" style="width: auto;" onchange="updateCommentDisplay()">
+                    <select id="commentLimit" class="form-select form-select-sm" style="width: auto;" onchange="displayedCommentsCount = parseInt(this.value === 'all' ? allComments.length : this.value); updateCommentDisplay()">
                         <option value="5">5 comments</option>
                         <option value="10">10 comments</option>
                         <option value="20">20 comments</option>
@@ -1035,6 +1035,28 @@ function initializeCommentSystem() {
     
     // Initialize MQTT for real-time updates
     initializeMQTT();
+    
+    // Add event listeners for comment controls
+    setTimeout(() => {
+        const sortSelect = document.getElementById('commentSort');
+        const limitSelect = document.getElementById('commentLimit');
+        
+        if (sortSelect) {
+            sortSelect.addEventListener('change', () => {
+                displayedCommentsCount = parseInt(limitSelect?.value || '5');
+                if (limitSelect?.value === 'all') displayedCommentsCount = allComments.length;
+                updateCommentDisplay();
+            });
+        }
+        
+        if (limitSelect) {
+            limitSelect.addEventListener('change', () => {
+                displayedCommentsCount = parseInt(limitSelect.value || '5');
+                if (limitSelect.value === 'all') displayedCommentsCount = allComments.length;
+                updateCommentDisplay();
+            });
+        }
+    }, 1000); // Wait a bit for DOM to be ready
 }
 
 function setupCommentInput() {
@@ -1105,6 +1127,8 @@ function showMoreComments() {
     const limitValue = document.getElementById('commentLimit')?.value || '5';
     const increment = limitValue === 'all' ? allComments.length : parseInt(limitValue);
     
+    console.log(`📄 Show more clicked - current: ${displayedCommentsCount}, increment: ${increment}, total: ${allComments.length}`);
+    
     // Increase the number of comments to display
     displayedCommentsCount += increment;
     
@@ -1113,12 +1137,51 @@ function showMoreComments() {
         displayedCommentsCount = allComments.length;
     }
     
-    // Update the display
-    updateCommentDisplay();
-    console.log(`📄 Now showing ${displayedCommentsCount} of ${allComments.length} comments`);
+    // Just directly update the display - don't worry about missing elements
+    const listEl = document.getElementById('commentsList');
+    if (listEl) {
+        // Get sorting preference
+        const sortOrder = document.getElementById('commentSort')?.value || 'newest';
+        
+        // Sort comments based on preference
+        let sortedComments;
+        if (sortOrder === 'newest') {
+            sortedComments = [...allComments].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+        } else {
+            sortedComments = [...allComments].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+        }
+        
+        // Get comments to show
+        const commentsToShow = sortedComments.slice(0, displayedCommentsCount);
+        
+        // Generate and display HTML
+        const commentsHtml = commentsToShow.map(comment => createCommentHtml(comment)).join('');
+        listEl.innerHTML = commentsHtml;
+        
+        // Update show more button
+        const showMoreBtn = document.getElementById('showMoreBtn');
+        const showMoreSection = document.getElementById('showMoreSection');
+        if (showMoreBtn && showMoreSection) {
+            const remaining = sortedComments.length - commentsToShow.length;
+            if (remaining > 0) {
+                showMoreSection.style.display = 'block';
+                showMoreBtn.innerHTML = `<i class="bi bi-chevron-down"></i> Show ${remaining} more comments`;
+            } else {
+                showMoreSection.style.display = 'none';
+            }
+        }
+        
+        console.log(`✅ Successfully showed ${commentsToShow.length} of ${allComments.length} comments`);
+    } else {
+        console.error('❌ Comments list element not found');
+    }
 }
 
 function displayComments() {
+    displayCommentsWithCallback();
+}
+
+function displayCommentsWithCallback(onComplete = null) {
     // For MQTT real-time updates, use a more direct approach if elements exist
     const loadingEl = document.getElementById('commentsLoading');
     const emptyEl = document.getElementById('commentsEmpty');
@@ -1128,6 +1191,7 @@ function displayComments() {
         // Elements exist, update immediately
         updateCommentDisplay(loadingEl, emptyEl, listEl);
         console.log('✅ Comments displayed immediately (elements found)');
+        if (onComplete) onComplete();
         return;
     }
     
@@ -1140,6 +1204,7 @@ function displayComments() {
         
         updateCommentDisplay(loadingEl, emptyEl, listEl);
         console.log('✅ Comments displayed after waiting');
+        if (onComplete) onComplete();
     }).catch(error => {
         console.error('❌ Failed to display comments after waiting:', error);
         
@@ -1148,41 +1213,55 @@ function displayComments() {
         if (commentCard) {
             console.log('🔧 Attempting to recreate comment elements...');
             recreateCommentElements(commentCard);
+            if (onComplete) onComplete();
         } else {
             console.error('❌ Comment card not found, cannot display comments');
+            if (onComplete) onComplete(); // Still call callback even if failed
         }
     });
 }
 
 function updateCommentDisplay(loadingEl, emptyEl, listEl) {
-    if (!loadingEl || !emptyEl || !listEl) {
-        // Fallback for elements not provided
-        loadingEl = document.getElementById('commentsLoading');
-        emptyEl = document.getElementById('commentsEmpty');
+    // Get elements if not provided
+    if (!listEl) {
         listEl = document.getElementById('commentsList');
     }
     
-    if (!loadingEl || !emptyEl || !listEl) {
-        console.warn('⚠️ Comment display elements not found');
+    // If we still don't have the main list element, we can't display anything
+    if (!listEl) {
+        console.warn('⚠️ commentsList element not found - cannot display comments');
         return;
     }
     
-    loadingEl.style.display = 'none';
+    console.log(`🔄 Updating comment display - total: ${allComments.length}, showing: ${displayedCommentsCount}`);
     
-    // Update comment count
+    // Hide loading if it exists
+    if (loadingEl) {
+        loadingEl.style.display = 'none';
+    }
+    
+    // Update comment count if element exists
     const commentCountEl = document.getElementById('commentCount');
     if (commentCountEl) {
         commentCountEl.textContent = allComments.length;
     }
     
+    // Handle empty state
     if (allComments.length === 0) {
-        emptyEl.style.display = 'block';
+        if (emptyEl) {
+            emptyEl.style.display = 'block';
+        } else {
+            listEl.innerHTML = '<div class="text-center text-muted py-4"><i class="bi bi-chat" style="font-size: 2rem;"></i><p class="mt-2 mb-0">No comments yet. Be the first to comment!</p></div>';
+        }
         const showMoreSection = document.getElementById('showMoreSection');
         if (showMoreSection) showMoreSection.style.display = 'none';
         return;
     }
     
-    emptyEl.style.display = 'none';
+    // Hide empty state if it exists
+    if (emptyEl) {
+        emptyEl.style.display = 'none';
+    }
     
     // Get sorting and limit preferences
     const sortOrder = document.getElementById('commentSort')?.value || 'newest';
@@ -1202,7 +1281,6 @@ function updateCommentDisplay(loadingEl, emptyEl, listEl) {
         commentsToShow = sortedComments;
         displayedCommentsCount = sortedComments.length;
     } else {
-        const limit = parseInt(limitValue);
         commentsToShow = sortedComments.slice(0, displayedCommentsCount);
     }
     
@@ -1214,8 +1292,10 @@ function updateCommentDisplay(loadingEl, emptyEl, listEl) {
         if (remaining > 0 && limitValue !== 'all') {
             showMoreSection.style.display = 'block';
             showMoreBtn.innerHTML = `<i class="bi bi-chevron-down"></i> Show ${remaining} more comments`;
+            console.log(`📄 Show more button visible - ${remaining} remaining comments`);
         } else {
             showMoreSection.style.display = 'none';
+            console.log(`📄 Show more button hidden - no remaining comments`);
         }
     }
     
@@ -1223,7 +1303,7 @@ function updateCommentDisplay(loadingEl, emptyEl, listEl) {
     const commentsHtml = commentsToShow.map(comment => createCommentHtml(comment)).join('');
     listEl.innerHTML = commentsHtml;
     
-    console.log(`✅ Displayed ${commentsToShow.length} of ${sortedComments.length} total comments (showing newest first)`);
+    console.log(`✅ Displayed ${commentsToShow.length} of ${sortedComments.length} total comments (${sortOrder} first)`);
 }
 
 function recreateCommentElements(commentCard) {
@@ -1740,24 +1820,14 @@ function handleNewComment(comment) {
         allComments.push(normalizedComment);
         comments.push(normalizedComment);
         
-        // Debug: Check DOM state when MQTT message arrives
-        console.log('🔧 DOM state at MQTT message time:', {
-            readyState: document.readyState,
-            hasCommentsList: !!document.getElementById('commentsList'),
-            hasCommentsLoading: !!document.getElementById('commentsLoading'),
-            hasCommentsEmpty: !!document.getElementById('commentsEmpty'),
-            allCommentElements: document.querySelectorAll('[id*="comment"]').length,
-            totalElementsWithId: document.querySelectorAll('[id]').length
+        // Display comments first, then show notification and highlighting
+        displayCommentsWithCallback(() => {
+            // Only show notification and highlight after comment is displayed
+            setTimeout(() => {
+                highlightNewComment(commentId);
+                showCommentNotification('New comment added', 'success', commentId);
+            }, 100);
         });
-        
-        // Try immediate display first, then fallback to waiting
-        displayComments();
-        
-        // Highlight the new comment after a short delay
-        setTimeout(() => highlightNewComment(commentId), 100);
-        
-        // Show notification with scroll functionality
-        showCommentNotification('New comment added', 'success', commentId);
     } else {
         console.log(`⚠️ Skipping comment - wrong block or already exists:`, {
             commentBlockId: commentBlockId,
@@ -1796,8 +1866,9 @@ function handleUpdatedComment(comment) {
             if (allIndex !== -1) allComments[allIndex] = normalizedComment;
             if (commentsIndex !== -1) comments[commentsIndex] = normalizedComment;
             
-            displayComments();
-            showCommentNotification('Comment updated', 'info');
+            displayCommentsWithCallback(() => {
+                showCommentNotification('Comment updated', 'info');
+            });
         } else {
             console.warn(`⚠️ Comment to update not found - CommentId: ${commentId}`);
         }
@@ -1817,8 +1888,9 @@ function handleDeletedComment(commentId) {
         if (allIndex !== -1) allComments.splice(allIndex, 1);
         if (commentsIndex !== -1) comments.splice(commentsIndex, 1);
         
-        displayComments();
-        showCommentNotification('Comment deleted', 'warning');
+        displayCommentsWithCallback(() => {
+            showCommentNotification('Comment deleted', 'warning');
+        });
     } else {
         console.log(`⚠️ Comment to delete not found in local list - CommentId: ${commentId}`);
     }
