@@ -14,12 +14,12 @@ namespace Models
         [ForeignKey("BlockId")]
         public Block Block { get; set; } = null!;
 
-        public string? UserId { get; set; } // Nullable for anonymous views
+        public string? UserId { get; set; } 
 
         [ForeignKey("UserId")]
         public ApplicationUser? User { get; set; }
 
-        public string IpAddress { get; set; } = string.Empty; // For anonymous tracking
+        public string IpAddress { get; set; } = string.Empty; 
 
         public DateTime ViewedAt { get; set; } = DateTime.UtcNow;
     }

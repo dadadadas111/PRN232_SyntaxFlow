@@ -24,9 +24,6 @@ namespace API.Controllers
                    throw new UnauthorizedAccessException("User ID not found in token");
         }
 
-        /// <summary>
-        /// Get all blocks owned by the current user
-        /// </summary>
         [HttpGet]
         public async Task<ActionResult<IEnumerable<BlockListResponse>>> GetUserBlocks()
         {
@@ -42,9 +39,6 @@ namespace API.Controllers
             }
         }
 
-        /// <summary>
-        /// Get all public blocks with filtering, sorting, and pagination
-        /// </summary>
         [HttpGet("public")]
         [AllowAnonymous]
         public async Task<ActionResult<IEnumerable<BlockListResponse>>> GetPublicBlocks(
@@ -85,9 +79,6 @@ namespace API.Controllers
             }
         }
 
-        /// <summary>
-        /// Get a specific public block by ID (accessible to all authenticated users)
-        /// </summary>
         [HttpGet("public/{id}")]
         [AllowAnonymous]
         public async Task<ActionResult<BlockResponse>> GetPublicBlock(int id)
@@ -121,9 +112,6 @@ namespace API.Controllers
             }
         }
 
-        /// <summary>
-        /// Get a specific block by ID (only if owned by current user)
-        /// </summary>
         [HttpGet("{id}")]
         public async Task<ActionResult<BlockResponse>> GetBlock(int id)
         {
@@ -143,9 +131,6 @@ namespace API.Controllers
             }
         }
 
-        /// <summary>
-        /// Create a new block
-        /// </summary>
         [HttpPost]
         public async Task<ActionResult<BlockResponse>> CreateBlock([FromBody] CreateBlockRequest request)
         {
@@ -169,9 +154,6 @@ namespace API.Controllers
             }
         }
 
-        /// <summary>
-        /// Update an existing block (only if owned by current user)
-        /// </summary>
         [HttpPut("{id}")]
         public async Task<ActionResult<BlockResponse>> UpdateBlock(int id, [FromBody] UpdateBlockRequest request)
         {
@@ -198,9 +180,6 @@ namespace API.Controllers
             }
         }
 
-        /// <summary>
-        /// Delete a block (only if owned by current user)
-        /// </summary>
         [HttpDelete("{id}")]
         public async Task<ActionResult> DeleteBlock(int id)
         {
@@ -220,9 +199,6 @@ namespace API.Controllers
             }
         }
 
-        /// <summary>
-        /// Star a block (increment StarCount)
-        /// </summary>
         [HttpPost("{id}/star")]
         public async Task<ActionResult<StarResponse>> StarBlock(int id)
         {
@@ -242,9 +218,6 @@ namespace API.Controllers
             }
         }
 
-        /// <summary>
-        /// Unstar a block (decrement StarCount)
-        /// </summary>
         [HttpDelete("{id}/star")]
         public async Task<ActionResult<StarResponse>> UnstarBlock(int id)
         {
@@ -264,9 +237,6 @@ namespace API.Controllers
             }
         }
 
-        /// <summary>
-        /// Get user's starred blocks
-        /// </summary>
         [HttpGet("starred")]
         public async Task<ActionResult<IEnumerable<BlockListResponse>>> GetStarredBlocks()
         {
@@ -282,9 +252,6 @@ namespace API.Controllers
             }
         }
 
-        /// <summary>
-        /// Get list of users who starred a specific block
-        /// </summary>
         [HttpGet("{id}/stars")]
         [AllowAnonymous]
         public async Task<ActionResult<IEnumerable<StarUserResponse>>> GetBlockStars(int id)
@@ -302,9 +269,6 @@ namespace API.Controllers
 
         // Fork System Endpoints
 
-        /// <summary>
-        /// Fork a block (creates new block with ForkedFromId set)
-        /// </summary>
         [HttpPost("{id}/fork")]
         public async Task<ActionResult<ForkResponse>> ForkBlock(int id, [FromBody] ForkBlockRequest? request = null)
         {
@@ -342,9 +306,6 @@ namespace API.Controllers
             }
         }
 
-        /// <summary>
-        /// Get blocks that the current user has forked
-        /// </summary>
         [HttpGet("forked")]
         public async Task<ActionResult<IEnumerable<BlockListResponse>>> GetForkedBlocks()
         {

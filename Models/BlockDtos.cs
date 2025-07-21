@@ -45,7 +45,7 @@ namespace Models
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
         public string[] Tags { get; set; } = Array.Empty<string>();
-        public bool IsStarredByCurrentUser { get; set; } = false; // For authenticated requests
+        public bool IsStarredByCurrentUser { get; set; } = false;
     }
 
     public class BlockListResponse
@@ -64,7 +64,7 @@ namespace Models
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
         public string[] Tags { get; set; } = Array.Empty<string>();
-        public bool IsStarredByCurrentUser { get; set; } = false; // For authenticated requests
+        public bool IsStarredByCurrentUser { get; set; } = false;
     }
 
     public class StarResponse

@@ -5,10 +5,6 @@ using Models;
 
 namespace Services
 {
-    /// <summary>
-    /// Production-ready implementation of ICodeTranslator for Python.
-    /// Supports: print, math_arithmetic, controls_if, controls_repeat_ext, variables_set.
-    /// </summary>
     public class PythonCodeTranslator : ICodeTranslator
     {
         private Dictionary<string, string> _variableIdToName = new();
