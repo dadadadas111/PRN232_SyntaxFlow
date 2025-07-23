@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Identity;
+using Models;
 
 namespace Services
 {
@@ -8,5 +9,6 @@ namespace Services
         Task<string?> LoginAsync(string username, string password);
         Task<bool> IsEmailVerifiedAsync(string username);
         Task<bool> SetEmailVerifiedAsync(string username, string email);
+        Task<ApplicationUser?> FindByEmailAsync(string email);
     }
 }

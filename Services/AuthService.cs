@@ -68,5 +68,10 @@ namespace Services
             var result = await _userManager.UpdateAsync(user);
             return result.Succeeded;
         }
+
+        public async Task<ApplicationUser?> FindByEmailAsync(string email)
+        {
+            return await _userManager.FindByEmailAsync(email);
+        }
     }
 }

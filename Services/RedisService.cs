@@ -12,34 +12,34 @@ namespace Services
             _db = redis.GetDatabase();
         }
 
-        public async Task SetOtpAsync(string otp, string username, string email, int triesLeft, int ttlSeconds)
+        public async Task SetOtpAsync(string username, string otp, string email, int triesLeft, int ttlSeconds)
         {
-            var value = JsonSerializer.Serialize(new { Username = username, Email = email, TriesLeft = triesLeft });
-            await _db.StringSetAsync($"otp:{otp}", value, TimeSpan.FromSeconds(ttlSeconds));
+            var value = JsonSerializer.Serialize(new { Otp = otp, Email = email, TriesLeft = triesLeft });
+            await _db.StringSetAsync($"otp:{username}", value, TimeSpan.FromSeconds(ttlSeconds));
         }
 
-        public async Task<(string Username, string Email, int TriesLeft)?> GetOtpAsync(string otp)
+        public async Task<(string Otp, string Email, int TriesLeft)?> GetOtpAsync(string username)
         {
-            var value = await _db.StringGetAsync($"otp:{otp}");
+            var value = await _db.StringGetAsync($"otp:{username}");
             if (value.IsNullOrEmpty) return null;
             var obj = JsonSerializer.Deserialize<OtpValue>(value!);
-            return obj == null ? null : (obj.Username, obj.Email, obj.TriesLeft);
+            return obj == null ? null : (obj.Otp, obj.Email, obj.TriesLeft);
         }
 
-        public async Task<bool> DecrementOtpTriesAsync(string otp)
+        public async Task<bool> DecrementOtpTriesAsync(string username)
         {
-            var value = await _db.StringGetAsync($"otp:{otp}");
+            var value = await _db.StringGetAsync($"otp:{username}");
             if (value.IsNullOrEmpty) return false;
             var obj = JsonSerializer.Deserialize<OtpValue>(value!);
             if (obj == null || obj.TriesLeft <= 0) return false;
             obj.TriesLeft--;
-            await _db.StringSetAsync($"otp:{otp}", JsonSerializer.Serialize(obj));
+            await _db.StringSetAsync($"otp:{username}", JsonSerializer.Serialize(obj));
             return obj.TriesLeft > 0;
         }
 
-        public async Task DeleteOtpAsync(string otp)
+        public async Task DeleteOtpAsync(string username)
         {
-            await _db.KeyDeleteAsync($"otp:{otp}");
+            await _db.KeyDeleteAsync($"otp:{username}");
         }
 
         public async Task BanUserAsync(string username, int ttlSeconds)
@@ -60,7 +60,7 @@ namespace Services
 
         private class OtpValue
         {
-            public string Username { get; set; } = "";
+            public string Otp { get; set; } = "";
             public string Email { get; set; } = "";
             public int TriesLeft { get; set; }
         }

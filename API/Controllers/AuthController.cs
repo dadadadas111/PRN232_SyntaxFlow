@@ -67,10 +67,15 @@ namespace API.Controllers
             if (!dto.Email.Contains("@"))
                 return BadRequest(new { message = "Invalid email format" });
             var emailExists = await _authService.IsEmailVerifiedAsync(username);
+            var userExists = await _authService.FindByEmailAsync(dto.Email);
             if (emailExists)
                 return BadRequest(new { message = "Email already exists for this user" });
+            if (userExists != null)
+            {
+                return BadRequest(new { message = "This email is already used by another user" });
+            } 
             var otp = OtpService.GenerateOtp();
-            await _emailVerificationService.RequestVerificationAsync(username, dto.Email, otp, 300);
+            _ = Task.Run(() => _emailVerificationService.RequestVerificationAsync(username, dto.Email, otp, 300));
             return Ok(new { success = true });
         }
 
@@ -79,7 +84,7 @@ namespace API.Controllers
         public async Task<IActionResult> VerifyEmailOtp([FromBody] VerifyOtpDto dto)
         {
             var username = GetCurrentUserName();
-            var otpInfo = await _redisService.GetOtpAsync(dto.Otp);
+            var otpInfo = await _redisService.GetOtpAsync(username);
             if (otpInfo == null)
                 return BadRequest(new { message = "Invalid OTP" });
             var email = otpInfo.Value.Email;
@@ -99,6 +104,10 @@ namespace API.Controllers
             var success = await _passwordResetService.RequestPasswordResetAsync(dto.Email, otp, 300);
             if (!success)
                 return BadRequest(new { message = "Email not found" });
+            // Find username for this email
+            var user = await _authService.FindByEmailAsync(dto.Email);
+            if (user == null)
+                return BadRequest(new { message = "Email not found" });
             await _emailService.SendEmailAsync(dto.Email, "SyntaxFlow Password Reset", $"<p>Your password reset code is <b>{otp}</b>. It expires in 5 minutes.</p>");
             return Ok(new { success = true });
         }
@@ -106,7 +115,13 @@ namespace API.Controllers
         [HttpPost("reset-password")]
         public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordDto dto)
         {
-            var success = await _passwordResetService.ResetPasswordAsync(dto.Otp, dto.NewPassword);
+            // Find username for this OTP (look up by OTP info in Redis)
+            // The client should provide the email in the request-password-reset step, not here
+            // So we need to find the username by searching for the OTP in Redis, but our logic uses username as key
+            // Instead, require the client to provide username (or get from session)
+            // For now, this endpoint should be called after request-password-reset, so use username from session
+            var username = GetCurrentUserName();
+            var success = await _passwordResetService.ResetPasswordAsync(username, dto.Otp, dto.NewPassword);
             if (!success)
                 return BadRequest(new { message = "Invalid OTP or password" });
             return Ok(new { success = true });
