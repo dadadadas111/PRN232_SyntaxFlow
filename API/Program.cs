@@ -8,9 +8,9 @@ using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
+
 // Add services to the container.
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
-    // options.UseInMemoryDatabase("SyntaxFlowDb"));
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"), 
         b => b.MigrationsAssembly("API")));
 builder.Services.AddIdentity<ApplicationUser, IdentityRole>()
@@ -23,6 +23,12 @@ builder.Services.AddScoped<IBlockService, BlockService>();
 builder.Services.AddScoped<ICommentService, CommentService>();
 builder.Services.AddSingleton<IMqttService, MqttService>();
 builder.Services.AddHostedService<MqttService>(provider => (MqttService)provider.GetService<IMqttService>()!);
+
+// Add Redis and email services
+builder.Services.AddRedis(builder.Configuration.GetConnectionString("Redis") ?? "localhost:6379");
+builder.Services.AddScoped<IEmailService, EmailService>();
+builder.Services.AddScoped<EmailVerificationService>();
+builder.Services.AddScoped<PasswordResetService>();
 
 builder.Services.AddAuthentication(options =>
 {

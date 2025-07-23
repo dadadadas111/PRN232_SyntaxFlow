@@ -12,11 +12,13 @@ namespace Services
     {
         private readonly UserManager<ApplicationUser> _userManager;
         private readonly IConfiguration _configuration;
+        private readonly ApplicationDbContext _dbContext;
 
-        public AuthService(UserManager<ApplicationUser> userManager, IConfiguration configuration)
+        public AuthService(UserManager<ApplicationUser> userManager, IConfiguration configuration, ApplicationDbContext dbContext)
         {
             _userManager = userManager;
             _configuration = configuration;
+            _dbContext = dbContext;
         }
 
         public async Task<(bool Success, string[] Errors)> RegisterAsync(string username, string password)
@@ -50,6 +52,21 @@ namespace Services
             );
 
             return new JwtSecurityTokenHandler().WriteToken(token);
+        }
+
+        public async Task<bool> IsEmailVerifiedAsync(string username)
+        {
+            var user = await _userManager.FindByNameAsync(username);
+            return user != null && !string.IsNullOrEmpty(user.Email);
+        }
+
+        public async Task<bool> SetEmailVerifiedAsync(string username, string email)
+        {
+            var user = await _userManager.FindByNameAsync(username);
+            if (user == null) return false;
+            user.Email = email;
+            var result = await _userManager.UpdateAsync(user);
+            return result.Succeeded;
         }
     }
 }

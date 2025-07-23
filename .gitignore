@@ -53,3 +53,5 @@ CodeCoverage/
 TestResult.xml
 nunit-*.xml
 /.vs
+API/appsettings.Development.json
+API/appsettings.json
