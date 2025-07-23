@@ -21,6 +21,8 @@
     <!-- <button onclick="showCode()" class="btn btn-info ms-2">Show JavaScript</button> -->
     <!-- <button onclick="runCode()" class="btn btn-warning ms-2">Run JavaScript</button> -->
     <span id="apiStatus" class="ms-3"></span>
+    <!-- Email Verification Notification (injected by JS) -->
+    <div id="emailVerificationContainer"></div>
     <div style="position:relative;">
         <pre id="codeDisplay" style="background:#f8f9fa; padding:1em; margin-top:1em; white-space:pre-wrap; word-break:break-all;"></pre>
         <button id="copyCodeBtn" title="Copy code" style="position:absolute;top:10px;right:10px;z-index:2;background:transparent;border:none;">
@@ -117,6 +119,9 @@
 
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+<!-- Email Verification JS -->
+<script src="~/js/emailVerification.js"></script>
 
 <script>
 const toolbox = `
@@ -226,10 +231,13 @@ function login(e) {
             setJwtStatus(true);
             var modal = bootstrap.Modal.getInstance(document.getElementById('authModal'));
             if (modal) modal.hide();
-            // Remove any lingering modal-backdrop and modal-open class
             document.querySelectorAll('.modal-backdrop').forEach(el => el.remove());
             document.body.classList.remove('modal-open');
             document.body.style = '';
+            // Set email verification status from response
+            if (typeof window.setEmailVerificationStatus === 'function') {
+                window.setEmailVerificationStatus(data.email_verified, data.email);
+            }
         } else {
             document.getElementById("loginStatus").innerText = "Invalid username or password.";
         }
@@ -385,6 +393,10 @@ function register(e) {
             document.querySelectorAll('.modal-backdrop').forEach(el => el.remove());
             document.body.classList.remove('modal-open');
             document.body.style = '';
+            // Set email verification status from response
+            if (typeof window.setEmailVerificationStatus === 'function') {
+                window.setEmailVerificationStatus(data.email_verified, data.email);
+            }
         } else {
             status.innerText = data.message || 'Registration failed.';
         }
