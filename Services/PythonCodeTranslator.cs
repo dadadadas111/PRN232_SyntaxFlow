@@ -13,7 +13,7 @@ namespace Services
         private bool needsMathImport = false;
         private bool needsRandomImport = false;
 
-        public string TranslateToPython(BlocklyAstDto ast)
+        public string Translate(BlocklyAstDto ast)
         {
             _variableIdToName.Clear();
             usedHelpers.Clear();
@@ -36,10 +36,8 @@ namespace Services
                 return "# Invalid or empty AST";
 
             var sb = new StringBuilder();
-            // Support both Blockly JSON root formats: { blocks: { blocks: [...] } } and { blocks: { root: { children: [...] } } }
             if (ast.Blocks.TryGetProperty("blocks", out var blocksElem))
             {
-                // Newer Blockly: { blocks: [...] }
                 if (blocksElem.ValueKind == JsonValueKind.Array)
                 {
                     foreach (var block in blocksElem.EnumerateArray())
@@ -47,7 +45,6 @@ namespace Services
                         TranslateBlock(block, sb, 0);
                     }
                 }
-                // Legacy Blockly: { root: { children: [...] } }
                 else if (blocksElem.ValueKind == JsonValueKind.Object)
                 {
                     if (blocksElem.TryGetProperty("root", out var rootElem) && rootElem.ValueKind == JsonValueKind.Object)

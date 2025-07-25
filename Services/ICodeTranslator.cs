@@ -12,6 +12,6 @@ namespace Services
         /// </summary>
         /// <param name="ast">The Blockly AST DTO.</param>
         /// <returns>Generated Python code as a string.</returns>
-        string TranslateToPython(BlocklyAstDto ast);
+        string Translate(BlocklyAstDto ast);
     }
 }

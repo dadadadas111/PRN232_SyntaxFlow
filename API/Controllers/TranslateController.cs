@@ -23,7 +23,7 @@ namespace API.Controllers
         {
             if (dto == null)
                 return BadRequest("Invalid Blockly AST");
-            var pythonCode = _translator.TranslateToPython(dto);
+            var pythonCode = _translator.Translate(dto);
             return Ok(pythonCode);
         }
     }
