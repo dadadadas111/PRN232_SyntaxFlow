@@ -18,7 +18,8 @@ builder.Services.AddIdentity<ApplicationUser, IdentityRole>()
     .AddDefaultTokenProviders();
 
 builder.Services.AddScoped<IAuthService, AuthService>();
-builder.Services.AddScoped<ICodeTranslator, PythonCodeTranslator>();
+builder.Services.AddScoped<PythonCodeTranslator>();
+builder.Services.AddScoped<JavaScriptCodeTranslator>();
 builder.Services.AddScoped<IBlockService, BlockService>();
 builder.Services.AddScoped<ICommentService, CommentService>();
 builder.Services.AddSingleton<IMqttService, MqttService>();
