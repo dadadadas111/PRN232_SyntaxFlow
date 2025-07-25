@@ -6,21 +6,23 @@
 <div class="container mt-4">
     <div class="d-flex justify-content-between align-items-center mb-3">
         <h2>Blockly Editor</h2>
-        <div>
-            <span id="jwtStatus" class="me-2 text-success" style="display:none;">Logged in</span>
-            <button id="loginBtn" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#authModal">Login</button>
-            <button id="registerBtn" class="btn btn-outline-primary btn-sm ms-1" data-bs-toggle="modal" data-bs-target="#authModal">Register</button>
-            <button id="logoutBtn" class="btn btn-outline-danger btn-sm" style="display:none;">Logout</button>
-        </div>
+        <!-- Remove the inline auth buttons since they're now in the layout -->
     </div>
     <script src="https://unpkg.com/blockly/blockly.min.js"></script>
     <div id="blocklyDiv" style="height: 400px; width: 100%; margin-bottom: 10px"></div>
-    <button onclick="exportJson()" class="btn btn-secondary">Export</button>
-    <button onclick="saveBlocky()" class="btn btn-info ms-2">Save Blocky</button>
-    <button onclick="sendToApi()" class="btn btn-success ms-2">Send to API</button>
-    <!-- <button onclick="showCode()" class="btn btn-info ms-2">Show JavaScript</button> -->
-    <!-- <button onclick="runCode()" class="btn btn-warning ms-2">Run JavaScript</button> -->
-    <span id="apiStatus" class="ms-3"></span>
+    <div class="d-flex align-items-center gap-2 mb-3">
+        <button onclick="exportJson()" class="btn btn-secondary">Export JSON</button>
+        <button onclick="saveBlocky()" class="btn btn-info">Save Block</button>
+        <div class="d-flex align-items-center gap-2">
+            <label for="languageSelect" class="form-label mb-0">Generate Code:</label>
+            <select id="languageSelect" class="form-select" style="width: auto;">
+                <option value="py">Python</option>
+                <option value="js">JavaScript</option>
+            </select>
+            <button onclick="sendToApi()" class="btn btn-success">Generate</button>
+        </div>
+        <span id="apiStatus" class="text-muted"></span>
+    </div>
     <!-- Email Verification Notification (injected by JS) -->
     <div id="emailVerificationContainer"></div>
     <div style="position:relative;">
@@ -228,7 +230,8 @@ function login(e) {
     .then(data => {
         if (data.token) {
             localStorage.setItem("token", data.token);
-            setJwtStatus(true);
+            const username = getUsernameFromToken(data.token);
+            updateAuthUI(true, username);
             var modal = bootstrap.Modal.getInstance(document.getElementById('authModal'));
             if (modal) modal.hide();
             document.querySelectorAll('.modal-backdrop').forEach(el => el.remove());
@@ -247,10 +250,14 @@ function login(e) {
 }
 
 function setJwtStatus(isLoggedIn) {
-    document.getElementById("jwtStatus").style.display = isLoggedIn ? "inline" : "none";
-    document.getElementById("logoutBtn").style.display = isLoggedIn ? "inline-block" : "none";
-    document.getElementById("loginBtn").style.display = isLoggedIn ? "none" : "inline-block";
-    document.getElementById("registerBtn").style.display = isLoggedIn ? "none" : "inline-block";
+    // This function is now handled by the global updateAuthUI function
+    const token = localStorage.getItem("token");
+    if (token && isLoggedIn) {
+        const username = getUsernameFromToken(token);
+        updateAuthUI(true, username);
+    } else {
+        updateAuthUI(false);
+    }
 }
 
 document.getElementById("logoutBtn").onclick = function() {
@@ -268,12 +275,18 @@ window.onload = checkJwt;
 function sendToApi() {
     const jwt = localStorage.getItem("token");
     const json = Blockly.serialization.workspaces.save(workspace);
+    const selectedLang = document.getElementById("languageSelect").value;
     document.getElementById("apiStatus").innerText = "";
+    
     if (!jwt) {
         document.getElementById("apiStatus").innerText = "Please login first.";
         return;
     }
-    fetch(apiBaseUrl + "api/translate", {
+    
+    // Show loading state
+    document.getElementById("apiStatus").innerHTML = '<i class="spinner-border spinner-border-sm me-1"></i>Generating code...';
+    
+    fetch(apiBaseUrl + `api/translate?lang=${selectedLang}`, {
         method: "POST",
         headers: {
             "Authorization": "Bearer " + jwt,
@@ -287,10 +300,11 @@ function sendToApi() {
     })
     .then(code => {
         document.getElementById("codeDisplay").innerText = code;
-        document.getElementById("apiStatus").innerText = "Success!";
+        const langName = selectedLang === 'py' ? 'Python' : 'JavaScript';
+        document.getElementById("apiStatus").innerHTML = `<span class="text-success"><i class="bi bi-check-circle"></i> ${langName} code generated successfully!</span>`;
     })
     .catch(err => {
-        document.getElementById("apiStatus").innerText = err.message || "API error";
+        document.getElementById("apiStatus").innerHTML = `<span class="text-danger"><i class="bi bi-exclamation-circle"></i> ${err.message || "API error"}</span>`;
     });
 }
 
@@ -387,7 +401,8 @@ function register(e) {
         if (data.token) {
             // Registration successful, use token to login
             localStorage.setItem("token", data.token);
-            setJwtStatus(true);
+            const username = getUsernameFromToken(data.token);
+            updateAuthUI(true, username);
             var modal = bootstrap.Modal.getInstance(document.getElementById('authModal'));
             if (modal) modal.hide();
             document.querySelectorAll('.modal-backdrop').forEach(el => el.remove());

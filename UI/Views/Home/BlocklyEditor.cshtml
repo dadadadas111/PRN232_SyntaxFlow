@@ -6,8 +6,19 @@
 <script src="https://unpkg.com/blockly/blockly.min.js"></script>
 
 <div id="blocklyDiv" style="height: 400px; width: 100%;"></div>
+<div class="d-flex align-items-center gap-2 my-3">
+    <button onclick="exportJson()" class="btn btn-secondary">Export JSON</button>
+    <div class="d-flex align-items-center gap-2">
+        <label for="standaloneLanguageSelect" class="form-label mb-0">Generate Code:</label>
+        <select id="standaloneLanguageSelect" class="form-select" style="width: auto;">
+            <option value="py">Python</option>
+            <option value="js">JavaScript</option>
+        </select>
+        <button onclick="generateCode()" class="btn btn-info">Generate</button>
+    </div>
+    <span id="codeStatus" class="text-muted"></span>
+</div>
 <pre id="codeDisplay" style="background:#f8f9fa; padding:1em; margin-top:1em; white-space:pre-wrap; word-break:break-all;"></pre>
-<button onclick="exportJson()">Export</button>
 
 <script>
 const toolbox = `
@@ -81,9 +92,45 @@ const toolbox = `
 
 const workspace = Blockly.inject('blocklyDiv', {toolbox});
 
+function generateCode() {
+    const jwt = localStorage.getItem("token");
+    const json = Blockly.serialization.workspaces.save(workspace);
+    const selectedLang = document.getElementById("standaloneLanguageSelect").value;
+    const statusElement = document.getElementById("codeStatus");
+    
+    if (!jwt) {
+        statusElement.innerHTML = '<span class="text-warning"><i class="bi bi-exclamation-triangle"></i> Please login to generate code.</span>';
+        return;
+    }
+    
+    // Show loading state
+    statusElement.innerHTML = '<i class="spinner-border spinner-border-sm me-1"></i>Generating code...';
+    
+    fetch('https://localhost:7174/api/translate?lang=' + selectedLang, {
+        method: "POST",
+        headers: {
+            "Authorization": "Bearer " + jwt,
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify(json)
+    })
+    .then(res => {
+        if (!res.ok) throw new Error("API error: " + res.status);
+        return res.text();
+    })
+    .then(code => {
+        document.getElementById("codeDisplay").innerText = code;
+        const langName = selectedLang === 'py' ? 'Python' : 'JavaScript';
+        statusElement.innerHTML = `<span class="text-success"><i class="bi bi-check-circle"></i> ${langName} code generated!</span>`;
+    })
+    .catch(err => {
+        statusElement.innerHTML = `<span class="text-danger"><i class="bi bi-exclamation-circle"></i> ${err.message || "API error"}</span>`;
+    });
+}
+
 function exportJson() {
     const json = Blockly.serialization.workspaces.save(workspace);
     document.getElementById("codeDisplay").innerText = JSON.stringify(json, null, 2);
-    console.log(JSON.stringify(json));
+    document.getElementById("codeStatus").innerHTML = '<span class="text-info"><i class="bi bi-info-circle"></i> JSON exported</span>';
 }
 </script>

@@ -45,15 +45,29 @@
         
         <!-- View Mode Controls -->
         <div id="viewControls" class="mb-3">
-            <button onclick="exportJson()" class="btn btn-secondary">Export</button>
-            <button onclick="sendToApi()" class="btn btn-info ms-2">Generate Code</button>
+            <button onclick="exportJson()" class="btn btn-secondary">Export JSON</button>
+            <div class="d-flex align-items-center gap-2 d-inline-flex ms-2">
+                <label for="viewLanguageSelect" class="form-label mb-0">Generate Code:</label>
+                <select id="viewLanguageSelect" class="form-select" style="width: auto;">
+                    <option value="py">Python</option>
+                    <option value="js">JavaScript</option>
+                </select>
+                <button onclick="sendToApi()" class="btn btn-info">Generate</button>
+            </div>
             <span id="apiStatus" class="ms-3"></span>
         </div>
         
         <!-- Edit Mode Controls -->
         <div id="editControls" class="mb-3" style="display: none;">
-            <button onclick="exportJson()" class="btn btn-secondary">Export</button>
-            <button onclick="sendToApi()" class="btn btn-info ms-2">Generate Code</button>
+            <button onclick="exportJson()" class="btn btn-secondary">Export JSON</button>
+            <div class="d-flex align-items-center gap-2 d-inline-flex ms-2">
+                <label for="editLanguageSelect" class="form-label mb-0">Generate Code:</label>
+                <select id="editLanguageSelect" class="form-select" style="width: auto;">
+                    <option value="py">Python</option>
+                    <option value="js">JavaScript</option>
+                </select>
+                <button onclick="sendToApi()" class="btn btn-info">Generate</button>
+            </div>
             <button onclick="cancelEdit()" class="btn btn-outline-secondary ms-2">Cancel</button>
             <button onclick="saveChanges()" class="btn btn-success ms-2">Save Changes</button>
             <span id="editApiStatus" class="ms-3"></span>
@@ -540,15 +554,21 @@ function submitUpdateBlock(e) {
 function sendToApi() {
     const jwt = localStorage.getItem("token");
     const json = Blockly.serialization.workspaces.save(workspace);
+    const selectedLang = isEditMode ? 
+        document.getElementById("editLanguageSelect").value : 
+        document.getElementById("viewLanguageSelect").value;
     const statusElement = isEditMode ? document.getElementById("editApiStatus") : document.getElementById("apiStatus");
     statusElement.innerText = "";
     
     if (!jwt) {
-        statusElement.innerText = "Please login first.";
+        statusElement.innerHTML = '<span class="text-warning"><i class="bi bi-exclamation-triangle"></i> Please login first.</span>';
         return;
     }
     
-    fetch(apiBaseUrl + "api/translate", {
+    // Show loading state
+    statusElement.innerHTML = '<i class="spinner-border spinner-border-sm me-1"></i>Generating code...';
+    
+    fetch(apiBaseUrl + `api/translate?lang=${selectedLang}`, {
         method: "POST",
         headers: {
             "Authorization": "Bearer " + jwt,
@@ -562,10 +582,11 @@ function sendToApi() {
     })
     .then(code => {
         document.getElementById("codeDisplay").innerText = code;
-        statusElement.innerText = "Success!";
+        const langName = selectedLang === 'py' ? 'Python' : 'JavaScript';
+        statusElement.innerHTML = `<span class="text-success"><i class="bi bi-check-circle"></i> ${langName} code generated!</span>`;
     })
     .catch(err => {
-        statusElement.innerText = err.message || "API error";
+        statusElement.innerHTML = `<span class="text-danger"><i class="bi bi-exclamation-circle"></i> ${err.message || "API error"}</span>`;
     });
 }
 
