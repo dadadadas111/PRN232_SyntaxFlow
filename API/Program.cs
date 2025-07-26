@@ -20,6 +20,8 @@ builder.Services.AddIdentity<ApplicationUser, IdentityRole>()
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<PythonCodeTranslator>();
 builder.Services.AddScoped<JavaScriptCodeTranslator>();
+builder.Services.AddScoped<IAiCodeGeneratorService, GeminiAiCodeGeneratorService>();
+builder.Services.AddHttpClient<GeminiAiCodeGeneratorService>();
 builder.Services.AddScoped<IBlockService, BlockService>();
 builder.Services.AddScoped<ICommentService, CommentService>();
 builder.Services.AddSingleton<IMqttService, MqttService>();

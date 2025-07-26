@@ -16,8 +16,22 @@
         <div class="d-flex align-items-center gap-2">
             <label for="languageSelect" class="form-label mb-0">Generate Code:</label>
             <select id="languageSelect" class="form-select" style="width: auto;">
-                <option value="py">Python</option>
-                <option value="js">JavaScript</option>
+                <optgroup label="Native Support (Fast)">
+                    <option value="py">Python</option>
+                    <option value="js">JavaScript</option>
+                </optgroup>
+                <optgroup label="AI-Powered (Slower, requires internet)">
+                    <option value="java">Java</option>
+                    <option value="cpp">C++</option>
+                    <option value="csharp">C#</option>
+                    <option value="go">Go</option>
+                    <option value="rust">Rust</option>
+                    <option value="php">PHP</option>
+                    <option value="ruby">Ruby</option>
+                    <option value="swift">Swift</option>
+                    <option value="kotlin">Kotlin</option>
+                    <option value="dart">Dart</option>
+                </optgroup>
             </select>
             <button onclick="sendToApi()" class="btn btn-success">Generate</button>
         </div>
@@ -283,10 +297,48 @@ function sendToApi() {
         return;
     }
     
-    // Show loading state
-    document.getElementById("apiStatus").innerHTML = '<i class="spinner-border spinner-border-sm me-1"></i>Generating code...';
+    const nativeLanguages = ['py', 'js'];
+    const isNative = nativeLanguages.includes(selectedLang);
     
-    fetch(apiBaseUrl + `api/translate?lang=${selectedLang}`, {
+    // Show loading state
+    const langName = getLanguageName(selectedLang);
+    document.getElementById("apiStatus").innerHTML = `<i class="spinner-border spinner-border-sm me-1"></i>Generating ${langName} code${isNative ? '...' : ' using AI...'}`;
+    
+    if (isNative) {
+        // Use regular API for native languages
+        fetch(apiBaseUrl + `api/translate?lang=${selectedLang}`, {
+            method: "POST",
+            headers: {
+                "Authorization": "Bearer " + jwt,
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify(json)
+        })
+        .then(res => {
+            if (!res.ok) throw new Error("API error: " + res.status);
+            return res.text();
+        })
+        .then(code => {
+            document.getElementById("codeDisplay").innerText = code;
+            document.getElementById("apiStatus").innerHTML = `<span class="text-success"><i class="bi bi-check-circle"></i> ${langName} code generated successfully!</span>`;
+        })
+        .catch(err => {
+            document.getElementById("apiStatus").innerHTML = `<span class="text-danger"><i class="bi bi-exclamation-circle"></i> ${err.message || "API error"}</span>`;
+        });
+    } else {
+        // Use streaming API for AI-powered languages
+        generateCodeWithStreaming(selectedLang, json, jwt, langName);
+    }
+}
+
+function generateCodeWithStreaming(language, json, jwt, langName) {
+    const codeDisplay = document.getElementById("codeDisplay");
+    const statusElement = document.getElementById("apiStatus");
+    
+    // Clear previous code
+    codeDisplay.innerText = "";
+    
+    fetch(apiBaseUrl + `api/translate/stream?lang=${language}`, {
         method: "POST",
         headers: {
             "Authorization": "Bearer " + jwt,
@@ -294,20 +346,62 @@ function sendToApi() {
         },
         body: JSON.stringify(json)
     })
-    .then(res => {
-        if (!res.ok) throw new Error("API error: " + res.status);
-        return res.text();
-    })
-    .then(code => {
-        document.getElementById("codeDisplay").innerText = code;
-        const langName = selectedLang === 'py' ? 'Python' : 'JavaScript';
-        document.getElementById("apiStatus").innerHTML = `<span class="text-success"><i class="bi bi-check-circle"></i> ${langName} code generated successfully!</span>`;
+    .then(response => {
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+        
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        
+        function readStream() {
+            reader.read().then(({ done, value }) => {
+                if (done) {
+                    statusElement.innerHTML = `<span class="text-success"><i class="bi bi-check-circle"></i> ${langName} code generated using AI!</span>`;
+                    return;
+                }
+                
+                const chunk = decoder.decode(value, { stream: true });
+                codeDisplay.innerText += chunk;
+                
+                // Auto-scroll to bottom
+                codeDisplay.scrollTop = codeDisplay.scrollHeight;
+                
+                // Continue reading
+                readStream();
+            }).catch(err => {
+                console.error('Stream reading error:', err);
+                statusElement.innerHTML = `<span class="text-danger"><i class="bi bi-exclamation-circle"></i> Stream error: ${err.message}</span>`;
+            });
+        }
+        
+        readStream();
     })
     .catch(err => {
-        document.getElementById("apiStatus").innerHTML = `<span class="text-danger"><i class="bi bi-exclamation-circle"></i> ${err.message || "API error"}</span>`;
+        console.error('Streaming request error:', err);
+        statusElement.innerHTML = `<span class="text-danger"><i class="bi bi-exclamation-circle"></i> ${err.message || "Streaming API error"}</span>`;
     });
 }
 
+function getLanguageName(code) {
+    const languageNames = {
+        'py': 'Python',
+        'js': 'JavaScript',
+        'java': 'Java',
+        'cpp': 'C++',
+        'csharp': 'C#',
+        'go': 'Go',
+        'rust': 'Rust',
+        'php': 'PHP',
+        'ruby': 'Ruby',
+        'swift': 'Swift',
+        'kotlin': 'Kotlin',
+        'dart': 'Dart'
+    };
+    return languageNames[code] || code.toUpperCase();
+}
+
+// ...existing code...
 function showCode() {
     const code = Blockly.JavaScript.workspaceToCode(workspace);
     document.getElementById("codeDisplay").innerText = code;
