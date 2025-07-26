@@ -1,7 +1,8 @@
 using Models;
+using Services.Interface;
 using System.Threading.Tasks;
 
-namespace Services
+namespace Services.Service
 {
     public class EmailVerificationService
     {

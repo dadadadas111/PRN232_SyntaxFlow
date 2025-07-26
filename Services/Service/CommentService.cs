@@ -1,7 +1,8 @@
 using Microsoft.EntityFrameworkCore;
 using Models;
+using Services.Interface;
 
-namespace Services
+namespace Services.Service
 {
     public class CommentService : ICommentService
     {

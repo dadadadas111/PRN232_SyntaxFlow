@@ -1,7 +1,8 @@
 using Microsoft.Extensions.Logging;
+using Services.Interface;
 using StackExchange.Redis;
 
-namespace Services
+namespace Services.Service
 {
     public class AiUsageService : IAiUsageService
     {

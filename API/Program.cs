@@ -3,9 +3,10 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Models;
-using Services;
 using System.Text;
 using StackExchange.Redis;
+using Services.Service;
+using Services.Interface;
 
 var builder = WebApplication.CreateBuilder(args);
 

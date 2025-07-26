@@ -1,8 +1,9 @@
+using Services.Interface;
 using StackExchange.Redis;
 using System.Text.Json;
 using System.Threading.Tasks;
 
-namespace Services
+namespace Services.Service
 {
     public class RedisService : IRedisService
     {

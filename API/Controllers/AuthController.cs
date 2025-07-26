@@ -1,7 +1,8 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Models;
-using Services;
+using Services.Interface;
+using Services.Service;
 
 namespace API.Controllers
 {

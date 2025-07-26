@@ -2,24 +2,21 @@ using System;
 using System.Text;
 using System.Text.Json;
 using Models;
+using Services.Interface;
 
-namespace Services
+namespace Services.Service
 {
-    public class PythonCodeTranslator : ICodeTranslator
+    public class JavaScriptCodeTranslator : ICodeTranslator
     {
         private Dictionary<string, string> _variableIdToName = new();
         private HashSet<string> usedHelpers = new HashSet<string>();
-
-        private bool needsMathImport = false;
-        private bool needsRandomImport = false;
 
         public string Translate(BlocklyAstDto ast)
         {
             _variableIdToName.Clear();
             usedHelpers.Clear();
-            needsMathImport = false;
-            needsRandomImport = false;
             var helpers = new StringBuilder();
+
             // Map variable IDs to names if present
             if (ast.Variables.HasValue && ast.Variables.Value.ValueKind == JsonValueKind.Array)
             {
@@ -33,7 +30,7 @@ namespace Services
             }
 
             if (ast == null || ast.Blocks.ValueKind != JsonValueKind.Object)
-                return "# Invalid or empty AST";
+                return "// Invalid or empty AST";
 
             var sb = new StringBuilder();
             if (ast.Blocks.TryGetProperty("blocks", out var blocksElem))
@@ -59,26 +56,27 @@ namespace Services
                     }
                 }
             }
+
             // Add header comments
             var header = new StringBuilder();
-            if (needsMathImport) header.AppendLine("import math");
-            if (needsRandomImport) header.AppendLine("import random");
-            header.AppendLine("# Translated code by SyntaxFlow Blockly-to-Python engine");
-            header.AppendLine("# Helper methods are auto-included as needed for block compatibility\n");
+            header.AppendLine("// Translated code by SyntaxFlow Blockly-to-JavaScript engine");
+            header.AppendLine("// Helper methods are auto-included as needed for block compatibility\n");
 
             // After translation, prepend helpers if any
-            if (usedHelpers.Contains("is_prime"))
+            if (usedHelpers.Contains("isPrime"))
             {
-                helpers.AppendLine("def is_prime(n):");
-                helpers.AppendLine("    if n <= 1: return False");
-                helpers.AppendLine("    if n == 2: return True");
-                helpers.AppendLine("    if n % 2 == 0: return False");
-                helpers.AppendLine("    for i in range(3, int(n ** 0.5) + 1, 2):");
-                helpers.AppendLine("        if n % i == 0: return False");
-                helpers.AppendLine("    return True\n");
-                helpers.AppendLine("# --- End of helpers, user code below ---\n");
-
+                helpers.AppendLine("function isPrime(n) {");
+                helpers.AppendLine("    if (n <= 1) return false;");
+                helpers.AppendLine("    if (n === 2) return true;");
+                helpers.AppendLine("    if (n % 2 === 0) return false;");
+                helpers.AppendLine("    for (let i = 3; i <= Math.sqrt(n); i += 2) {");
+                helpers.AppendLine("        if (n % i === 0) return false;");
+                helpers.AppendLine("    }");
+                helpers.AppendLine("    return true;");
+                helpers.AppendLine("}\n");
+                helpers.AppendLine("// --- End of helpers, user code below ---\n");
             }
+
             return header.ToString() + helpers.ToString() + sb.ToString();
         }
 
@@ -92,7 +90,7 @@ namespace Services
                     HandlePrint(block, sb, indent);
                     break;
                 case "math_arithmetic":
-                    sb.AppendLine(Indent(indent) + HandleMath(block));
+                    sb.AppendLine(Indent(indent) + HandleMath(block) + ";");
                     break;
                 case "controls_if":
                     HandleIf(block, sb, indent);
@@ -136,20 +134,20 @@ namespace Services
                     sb.Append(HandleLogicOperation(block));
                     break;
                 case "logic_negate":
-                    sb.Append($"not {ExtractValue(block, "BOOL")}");
+                    sb.Append($"!{ExtractValue(block, "BOOL")}");
                     break;
                 case "logic_boolean":
                     var boolVal = block.GetProperty("fields").GetProperty("BOOL").GetString();
-                    sb.Append(boolVal == "TRUE" ? "True" : "False");
+                    sb.Append(boolVal == "TRUE" ? "true" : "false");
                     break;
                 case "logic_null":
-                    sb.Append("None");
+                    sb.Append("null");
                     break;
                 case "logic_ternary":
                     var cond = ExtractValue(block, "IF");
                     var thenVal = ExtractValue(block, "THEN");
                     var elseVal = ExtractValue(block, "ELSE");
-                    sb.Append($"({thenVal} if {cond} else {elseVal})");
+                    sb.Append($"({cond} ? {thenVal} : {elseVal})");
                     break;
                 // Loops
                 case "controls_whileUntil":
@@ -163,7 +161,7 @@ namespace Services
                     break;
                 case "controls_flow_statements":
                     var flow = block.GetProperty("fields").GetProperty("FLOW").GetString();
-                    sb.AppendLine(Indent(indent) + (flow == "BREAK" ? "break" : "continue"));
+                    sb.AppendLine(Indent(indent) + (flow == "BREAK" ? "break;" : "continue;"));
                     break;
                 // Math
                 case "math_number":
@@ -266,7 +264,7 @@ namespace Services
                     sb.Append(HandleListsSort(block));
                     break;
                 default:
-                    sb.AppendLine(Indent(indent) + $"# Unsupported block: {type}");
+                    sb.AppendLine(Indent(indent) + $"// Unsupported block: {type}");
                     break;
             }
             // Recursively handle next block in sequence
@@ -282,7 +280,7 @@ namespace Services
         private void HandlePrint(JsonElement block, StringBuilder sb, int indent)
         {
             var value = ExtractValue(block, "TEXT");
-            sb.AppendLine(Indent(indent) + $"print({value})");
+            sb.AppendLine(Indent(indent) + $"console.log({value});");
         }
 
         private string HandleMath(JsonElement block)
@@ -290,7 +288,7 @@ namespace Services
             var op = block.GetProperty("fields").GetProperty("OP").GetString();
             var left = ExtractValue(block, "A");
             var right = ExtractValue(block, "B");
-            var pyOp = op switch
+            var jsOp = op switch
             {
                 "ADD" => "+",
                 "MINUS" => "-",
@@ -299,7 +297,7 @@ namespace Services
                 "POWER" => "**",
                 _ => op
             };
-            return $"{left} {pyOp} {right}";
+            return $"{left} {jsOp} {right}";
         }
 
         private void HandleIf(JsonElement block, StringBuilder sb, int indent)
@@ -313,8 +311,8 @@ namespace Services
                 if (!(block.TryGetProperty("inputs", out var inputsElem) && inputsElem.TryGetProperty(ifKey, out var ifElem)))
                     break;
                 var cond = ExtractValue(block, ifKey);
-                string keyword = n == 0 ? "if" : "elif";
-                sb.AppendLine(Indent(indent) + $"{keyword} {cond}:");
+                string keyword = n == 0 ? "if" : "else if";
+                sb.AppendLine(Indent(indent) + $"{keyword} ({cond}) {{");
                 if (inputsElem.TryGetProperty(doKey, out var doElem))
                 {
                     if (doElem.TryGetProperty("block", out var doBlock) && doBlock.ValueKind == JsonValueKind.Object)
@@ -322,23 +320,25 @@ namespace Services
                         TranslateBlock(doBlock, sb, indent + 1);
                     }
                 }
+                sb.AppendLine(Indent(indent) + "}");
                 n++;
             }
             // Handle ELSE branch if present
             if (block.TryGetProperty("inputs", out var inputsElem2) && inputsElem2.TryGetProperty("ELSE", out var elseElem))
             {
-                sb.AppendLine(Indent(indent) + "else:");
+                sb.AppendLine(Indent(indent) + "else {");
                 if (elseElem.TryGetProperty("block", out var elseBlock) && elseBlock.ValueKind == JsonValueKind.Object)
                 {
                     TranslateBlock(elseBlock, sb, indent + 1);
                 }
+                sb.AppendLine(Indent(indent) + "}");
             }
         }
 
         private void HandleRepeat(JsonElement block, StringBuilder sb, int indent)
         {
             var times = ExtractValue(block, "TIMES");
-            sb.AppendLine(Indent(indent) + $"for _ in range({times}):");
+            sb.AppendLine(Indent(indent) + $"for (let i = 0; i < {times}; i++) {{");
             if (block.TryGetProperty("inputs", out var inputsElem) && inputsElem.TryGetProperty("DO", out var doElem))
             {
                 if (doElem.TryGetProperty("block", out var doBlock) && doBlock.ValueKind == JsonValueKind.Object)
@@ -346,6 +346,7 @@ namespace Services
                     TranslateBlock(doBlock, sb, indent + 1);
                 }
             }
+            sb.AppendLine(Indent(indent) + "}");
         }
 
         private void HandleVariableSet(JsonElement block, StringBuilder sb, int indent)
@@ -366,7 +367,7 @@ namespace Services
                 varName = varField.ToString();
             }
             var value = ExtractValue(block, "VALUE");
-            sb.AppendLine(Indent(indent) + $"{varName} = {value}");
+            sb.AppendLine(Indent(indent) + $"let {varName} = {value};");
         }
 
         private void HandleMathChange(JsonElement block, StringBuilder sb, int indent)
@@ -387,15 +388,15 @@ namespace Services
                 varName = varField.ToString();
             }
             var delta = ExtractValue(block, "DELTA");
-            sb.AppendLine(Indent(indent) + $"{varName} += {delta}");
+            sb.AppendLine(Indent(indent) + $"{varName} += {delta};");
         }
 
         private void HandleWhileUntil(JsonElement block, StringBuilder sb, int indent)
         {
             var mode = block.GetProperty("fields").GetProperty("MODE").GetString();
             var cond = ExtractValue(block, "BOOL");
-            var pyCond = mode == "UNTIL" ? $"not ({cond})" : cond;
-            sb.AppendLine(Indent(indent) + $"while {pyCond}:");
+            var jsCond = mode == "UNTIL" ? $"!({cond})" : cond;
+            sb.AppendLine(Indent(indent) + $"while ({jsCond}) {{");
             if (block.TryGetProperty("inputs", out var inputsElem) && inputsElem.TryGetProperty("DO", out var doElem))
             {
                 if (doElem.TryGetProperty("block", out var doBlock) && doBlock.ValueKind == JsonValueKind.Object)
@@ -403,6 +404,7 @@ namespace Services
                     TranslateBlock(doBlock, sb, indent + 1);
                 }
             }
+            sb.AppendLine(Indent(indent) + "}");
         }
 
         private void HandleFor(JsonElement block, StringBuilder sb, int indent)
@@ -425,7 +427,7 @@ namespace Services
             var from = ExtractValue(block, "FROM");
             var to = ExtractValue(block, "TO");
             var by = ExtractValue(block, "BY");
-            sb.AppendLine(Indent(indent) + $"for {varName} in range({from}, {to} + 1, {by}):");
+            sb.AppendLine(Indent(indent) + $"for (let {varName} = {from}; {varName} <= {to}; {varName} += {by}) {{");
             if (block.TryGetProperty("inputs", out var inputsElem) && inputsElem.TryGetProperty("DO", out var doElem))
             {
                 if (doElem.TryGetProperty("block", out var doBlock) && doBlock.ValueKind == JsonValueKind.Object)
@@ -433,6 +435,7 @@ namespace Services
                     TranslateBlock(doBlock, sb, indent + 1);
                 }
             }
+            sb.AppendLine(Indent(indent) + "}");
         }
 
         private void HandleForEach(JsonElement block, StringBuilder sb, int indent)
@@ -453,7 +456,7 @@ namespace Services
                 varName = varField.ToString();
             }
             var list = ExtractValue(block, "LIST");
-            sb.AppendLine(Indent(indent) + $"for {varName} in {list}:");
+            sb.AppendLine(Indent(indent) + $"for (let {varName} of {list}) {{");
             if (block.TryGetProperty("inputs", out var inputsElem) && inputsElem.TryGetProperty("DO", out var doElem))
             {
                 if (doElem.TryGetProperty("block", out var doBlock) && doBlock.ValueKind == JsonValueKind.Object)
@@ -461,6 +464,7 @@ namespace Services
                     TranslateBlock(doBlock, sb, indent + 1);
                 }
             }
+            sb.AppendLine(Indent(indent) + "}");
         }
 
         private string ExtractValue(JsonElement block, string inputName)
@@ -483,11 +487,11 @@ namespace Services
                     case JsonValueKind.String:
                         return fieldElem.GetString() ?? "";
                     case JsonValueKind.Number:
-                        return fieldElem.GetRawText(); // preserves number formatting
+                        return fieldElem.GetRawText();
                     case JsonValueKind.True:
-                        return "True";
+                        return "true";
                     case JsonValueKind.False:
-                        return "False";
+                        return "false";
                     default:
                         return fieldElem.ToString();
                 }
@@ -502,17 +506,17 @@ namespace Services
             var op = block.GetProperty("fields").GetProperty("OP").GetString();
             var a = ExtractValue(block, "A");
             var b = ExtractValue(block, "B");
-            var pyOp = op switch
+            var jsOp = op switch
             {
-                "EQ" => "==",
-                "NEQ" => "!=",
+                "EQ" => "===",
+                "NEQ" => "!==",
                 "LT" => "<",
                 "LTE" => "<=",
                 "GT" => ">",
                 "GTE" => ">=",
                 _ => op
             };
-            return $"{a} {pyOp} {b}";
+            return $"{a} {jsOp} {b}";
         }
 
         private string HandleLogicOperation(JsonElement block)
@@ -520,63 +524,60 @@ namespace Services
             var op = block.GetProperty("fields").GetProperty("OP").GetString();
             var a = ExtractValue(block, "A");
             var b = ExtractValue(block, "B");
-            var pyOp = op switch
+            var jsOp = op switch
             {
-                "AND" => "and",
-                "OR" => "or",
+                "AND" => "&&",
+                "OR" => "||",
                 _ => op
             };
-            return $"({a} {pyOp} {b})";
+            return $"({a} {jsOp} {b})";
         }
 
         private string HandleMathSingle(JsonElement block)
         {
-            needsMathImport = true;
             var op = block.GetProperty("fields").GetProperty("OP").GetString();
             var num = ExtractValue(block, "NUM");
             return op switch
             {
-                "ROOT" => $"({num}) ** 0.5",
-                "ABS" => $"abs({num})",
+                "ROOT" => $"Math.sqrt({num})",
+                "ABS" => $"Math.abs({num})",
                 "NEG" => $"-({num})",
-                "LN" => $"math.log({num})",
-                "LOG10" => $"math.log10({num})",
-                "EXP" => $"math.exp({num})",
-                "POW10" => $"10 ** ({num})",
-                _ => $"# Unsupported math_single op: {op}"
+                "LN" => $"Math.log({num})",
+                "LOG10" => $"Math.log10({num})",
+                "EXP" => $"Math.exp({num})",
+                "POW10" => $"Math.pow(10, {num})",
+                _ => $"// Unsupported math_single op: {op}"
             };
         }
 
         private string HandleMathTrig(JsonElement block)
         {
-            needsMathImport = true;
             var op = block.GetProperty("fields").GetProperty("OP").GetString();
             var angle = ExtractValue(block, "NUM");
             return op switch
             {
-                "SIN" => $"math.sin(math.radians({angle}))",
-                "COS" => $"math.cos(math.radians({angle}))",
-                "TAN" => $"math.tan(math.radians({angle}))",
-                "ASIN" => $"math.degrees(math.asin({angle}))",
-                "ACOS" => $"math.degrees(math.acos({angle}))",
-                "ATAN" => $"math.degrees(math.atan({angle}))",
-                _ => $"# Unsupported math_trig op: {op}"
+                "SIN" => $"Math.sin(({angle}) * Math.PI / 180)",
+                "COS" => $"Math.cos(({angle}) * Math.PI / 180)",
+                "TAN" => $"Math.tan(({angle}) * Math.PI / 180)",
+                "ASIN" => $"Math.asin({angle}) * 180 / Math.PI",
+                "ACOS" => $"Math.acos({angle}) * 180 / Math.PI",
+                "ATAN" => $"Math.atan({angle}) * 180 / Math.PI",
+                _ => $"// Unsupported math_trig op: {op}"
             };
         }
 
         private string HandleMathConstant(JsonElement block)
         {
-            needsMathImport = true;
             var constant = block.GetProperty("fields").GetProperty("CONSTANT").GetString();
             return constant switch
             {
-                "PI" => "math.pi",
-                "E" => "math.e",
-                "GOLDEN_RATIO" => "(1 + 5 ** 0.5) / 2",
-                "SQRT2" => "math.sqrt(2)",
-                "SQRT1_2" => "math.sqrt(0.5)",
-                "INFINITY" => "float('inf')",
-                _ => $"# Unsupported math_constant: {constant}"
+                "PI" => "Math.PI",
+                "E" => "Math.E",
+                "GOLDEN_RATIO" => "(1 + Math.sqrt(5)) / 2",
+                "SQRT2" => "Math.SQRT2",
+                "SQRT1_2" => "Math.SQRT1_2",
+                "INFINITY" => "Infinity",
+                _ => $"// Unsupported math_constant: {constant}"
             };
         }
 
@@ -586,35 +587,33 @@ namespace Services
             var num = ExtractValue(block, "NUMBER_TO_CHECK");
             switch (prop)
             {
-                case "EVEN": return $"({num}) % 2 == 0";
-                case "ODD": return $"({num}) % 2 == 1";
+                case "EVEN": return $"({num}) % 2 === 0";
+                case "ODD": return $"({num}) % 2 === 1";
                 case "PRIME":
-                    // Mark is_prime as used
-                    usedHelpers?.Add("is_prime");
-                    return $"is_prime({num})";
-                case "WHOLE": return $"({num}) % 1 == 0";
+                    usedHelpers?.Add("isPrime");
+                    return $"isPrime({num})";
+                case "WHOLE": return $"({num}) % 1 === 0";
                 case "POSITIVE": return $"({num}) > 0";
                 case "NEGATIVE": return $"({num}) < 0";
-                case "DIVISIBLE_BY": return $"({num}) % {ExtractValue(block, "DIVISOR")} == 0";
-                default: return $"# Unsupported math_number_property: {prop}";
+                case "DIVISIBLE_BY": return $"({num}) % {ExtractValue(block, "DIVISOR")} === 0";
+                default: return $"// Unsupported math_number_property: {prop}";
             }
         }
 
         private string HandleMathRound(JsonElement block)
         {
-            needsMathImport = true;
             var op = block.GetProperty("fields").GetProperty("OP").GetString();
             var num = ExtractValue(block, "NUM");
             return op switch
             {
-                "ROUND" => $"round({num})",
-                "ROUNDUP" => $"math.ceil({num})",
-                "ROUNDDOWN" => $"math.floor({num})",
-                _ => $"# Unsupported math_round op: {op}"
+                "ROUND" => $"Math.round({num})",
+                "ROUNDUP" => $"Math.ceil({num})",
+                "ROUNDDOWN" => $"Math.floor({num})",
+                _ => $"// Unsupported math_round op: {op}"
             };
         }
 
-        private string HandleMathOnList(JsonElement block) => "# Unsupported: math_on_list";
+        private string HandleMathOnList(JsonElement block) => "// Unsupported: math_on_list";
 
         private string HandleMathModulo(JsonElement block)
         {
@@ -628,28 +627,25 @@ namespace Services
             var value = ExtractValue(block, "VALUE");
             var low = ExtractValue(block, "LOW");
             var high = ExtractValue(block, "HIGH");
-            return $"min(max({value}, {low}), {high})";
+            return $"Math.min(Math.max({value}, {low}), {high})";
         }
 
         private string HandleMathRandomInt(JsonElement block)
         {
-            needsRandomImport = true;
             var from = ExtractValue(block, "FROM");
             var to = ExtractValue(block, "TO");
-            return $"random.randint({from}, {to})";
+            return $"Math.floor(Math.random() * ({to} - {from} + 1)) + {from}";
         }
 
         private string HandleMathRandomFloat(JsonElement block)
         {
-            needsRandomImport = true;
-            return "random.random()";
+            return "Math.random()";
         }
 
         // --- Text Block Helpers ---
         private string HandleTextJoin(JsonElement block)
         {
             var args = new List<string>();
-            // Modern Blockly: ADD0, ADD1, ...
             if (block.TryGetProperty("inputs", out var inputsElem))
             {
                 int i = 0;
@@ -660,11 +656,11 @@ namespace Services
                         var sb = new StringBuilder();
                         TranslateBlock(itemBlock, sb, 0);
                         var arg = sb.ToString().Trim();
-                        // If it's a string literal, don't wrap; else, wrap in str()
-                        if (arg.StartsWith("\"") && arg.EndsWith("\""))
-                            args.Add(arg);
+                        // Convert to string if not already a string literal
+                        if (!(arg.StartsWith("\"") && arg.EndsWith("\"")))
+                            args.Add($"String({arg})");
                         else
-                            args.Add($"str({arg})");
+                            args.Add(arg);
                     }
                     i++;
                 }
@@ -680,7 +676,6 @@ namespace Services
             return string.Join(" + ", args);
         }
 
-        // Overload to support str() wrapping for legacy join
         private void FlattenTextJoinItems(JsonElement block, List<string> args, bool wrapNonString)
         {
             if (block.GetProperty("type").GetString() == "text")
@@ -690,7 +685,6 @@ namespace Services
             }
             else if (block.GetProperty("type").GetString() == "text_join")
             {
-                // Nested join
                 if (block.TryGetProperty("inputs", out var inputsElem) && inputsElem.TryGetProperty("ITEMS", out var itemsElem))
                 {
                     if (itemsElem.TryGetProperty("block", out var itemsBlock) && itemsBlock.ValueKind == JsonValueKind.Object)
@@ -703,11 +697,10 @@ namespace Services
             {
                 var val = ExtractValue(block, "");
                 if (wrapNonString && !(val.StartsWith("\"") && val.EndsWith("\"")))
-                    args.Add($"str({val})");
+                    args.Add($"String({val})");
                 else
                     args.Add(val);
             }
-            // Handle next item in the join list
             if (block.TryGetProperty("next", out var nextElem) && nextElem.ValueKind == JsonValueKind.Object)
             {
                 if (nextElem.TryGetProperty("block", out var nextBlock) && nextBlock.ValueKind == JsonValueKind.Object)
@@ -721,19 +714,19 @@ namespace Services
         {
             var varName = block.GetProperty("fields").GetProperty("VAR").GetString();
             var value = ExtractValue(block, "TEXT");
-            return $"{varName} += str({value})";
+            return $"{varName} += String({value});";
         }
 
         private string HandleTextLength(JsonElement block)
         {
             var value = ExtractValue(block, "VALUE");
-            return $"len({value})";
+            return $"{value}.length";
         }
 
         private string HandleTextIsEmpty(JsonElement block)
         {
             var value = ExtractValue(block, "VALUE");
-            return $"len({value}) == 0";
+            return $"{value}.length === 0";
         }
 
         private string HandleTextIndexOf(JsonElement block)
@@ -741,7 +734,7 @@ namespace Services
             var haystack = ExtractValue(block, "VALUE");
             var needle = ExtractValue(block, "FIND");
             var end = block.GetProperty("fields").GetProperty("END").GetString();
-            var method = end == "FIRST" ? "find" : "rfind";
+            var method = end == "FIRST" ? "indexOf" : "lastIndexOf";
             return $"{haystack}.{method}({needle})";
         }
 
@@ -749,7 +742,7 @@ namespace Services
         {
             var value = ExtractValue(block, "VALUE");
             var at = ExtractValue(block, "AT");
-            return $"{value}[{at}]";
+            return $"{value}.charAt({at})";
         }
 
         private string HandleTextGetSubstring(JsonElement block)
@@ -757,7 +750,7 @@ namespace Services
             var value = ExtractValue(block, "STRING");
             var start = ExtractValue(block, "START");
             var end = ExtractValue(block, "END");
-            return $"{value}[{start}:{end}]";
+            return $"{value}.substring({start}, {end})";
         }
 
         private string HandleTextChangeCase(JsonElement block)
@@ -766,10 +759,10 @@ namespace Services
             var caseOp = block.GetProperty("fields").GetProperty("CASE").GetString();
             return caseOp switch
             {
-                "UPPERCASE" => $"str({value}).upper()",
-                "LOWERCASE" => $"str({value}).lower()",
-                "TITLECASE" => $"str({value}).title()",
-                _ => $"str({value})"
+                "UPPERCASE" => $"String({value}).toUpperCase()",
+                "LOWERCASE" => $"String({value}).toLowerCase()",
+                "TITLECASE" => $"String({value}).replace(/\\w\\S*/g, (txt) => txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase())",
+                _ => $"String({value})"
             };
         }
 
@@ -779,17 +772,16 @@ namespace Services
             var mode = block.GetProperty("fields").GetProperty("MODE").GetString();
             return mode switch
             {
-                "BOTH" => $"str({value}).strip()",
-                "LEFT" => $"str({value}).lstrip()",
-                "RIGHT" => $"str({value}).rstrip()",
-                _ => $"str({value})"
+                "BOTH" => $"String({value}).trim()",
+                "LEFT" => $"String({value}).trimStart()",
+                "RIGHT" => $"String({value}).trimEnd()",
+                _ => $"String({value})"
             };
         }
 
         // --- List Block Helpers ---
         private string HandleListsCreateWith(JsonElement block)
         {
-            // Create a list with N items
             var items = new List<string>();
             if (block.TryGetProperty("inputs", out var inputsElem))
             {
@@ -812,19 +804,19 @@ namespace Services
         {
             var item = ExtractValue(block, "ITEM");
             var count = ExtractValue(block, "NUM");
-            return $"[{item}] * {count}";
+            return $"Array({count}).fill({item})";
         }
 
         private string HandleListsLength(JsonElement block)
         {
             var value = ExtractValue(block, "VALUE");
-            return $"len({value})";
+            return $"{value}.length";
         }
 
         private string HandleListsIsEmpty(JsonElement block)
         {
             var value = ExtractValue(block, "VALUE");
-            return $"len({value}) == 0";
+            return $"{value}.length === 0";
         }
 
         private string HandleListsIndexOf(JsonElement block)
@@ -832,11 +824,8 @@ namespace Services
             var list = ExtractValue(block, "VALUE");
             var item = ExtractValue(block, "FIND");
             var end = block.GetProperty("fields").GetProperty("END").GetString();
-            var method = end == "FIRST" ? "index" : "len({list}) - 1 - {list}[::-1].index({item})";
-            if (end == "FIRST")
-                return $"{list}.index({item})";
-            else
-                return $"len({list}) - 1 - {list}[::-1].index({item})";
+            var method = end == "FIRST" ? "indexOf" : "lastIndexOf";
+            return $"{list}.{method}({item})";
         }
 
         private string HandleListsGetIndex(JsonElement block)
@@ -851,7 +840,7 @@ namespace Services
             var list = ExtractValue(block, "LIST");
             var index = ExtractValue(block, "AT");
             var value = ExtractValue(block, "TO");
-            return $"{list}[{index}] = {value}";
+            return $"{list}[{index}] = {value};";
         }
 
         private string HandleListsGetSublist(JsonElement block)
@@ -859,7 +848,7 @@ namespace Services
             var list = ExtractValue(block, "LIST");
             var start = ExtractValue(block, "START");
             var end = ExtractValue(block, "END");
-            return $"{list}[{start}:{end}]";
+            return $"{list}.slice({start}, {end})";
         }
 
         private string HandleListsSplit(JsonElement block)
@@ -870,7 +859,7 @@ namespace Services
             if (mode == "SPLIT")
                 return $"{value}.split({delimiter})";
             else
-                return $"{delimiter}.join({value})";
+                return $"{value}.join({delimiter})";
         }
 
         private string HandleListsSort(JsonElement block)
@@ -878,8 +867,8 @@ namespace Services
             var list = ExtractValue(block, "LIST");
             var type = block.GetProperty("fields").GetProperty("TYPE").GetString();
             var direction = block.GetProperty("fields").GetProperty("DIRECTION").GetString();
-            var reverse = direction == "1" ? "True" : "False";
-            return $"sorted({list}, reverse={reverse})";
+            var sortCall = direction == "1" ? $"[...{list}].sort().reverse()" : $"[...{list}].sort()";
+            return sortCall;
         }
     }
 }

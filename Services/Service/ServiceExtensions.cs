@@ -1,7 +1,8 @@
 using Microsoft.Extensions.DependencyInjection;
+using Services.Interface;
 using StackExchange.Redis;
 
-namespace Services
+namespace Services.Service
 {
     public static class ServiceExtensions
     {

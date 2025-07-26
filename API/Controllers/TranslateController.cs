@@ -2,7 +2,8 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Models;
-using Services;
+using Services.Interface;
+using Services.Service;
 using System.Text;
 
 namespace API.Controllers

@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Identity;
 using Models;
 
-namespace Services
+namespace Services.Interface
 {
     public interface IAuthService
     {

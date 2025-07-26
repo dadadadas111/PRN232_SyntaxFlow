@@ -1,7 +1,8 @@
 using Microsoft.EntityFrameworkCore;
 using Models;
+using Services.Interface;
 
-namespace Services
+namespace Services.Service
 {
     public class BlockService : IBlockService
     {
@@ -701,7 +702,7 @@ namespace Services
                     RecentStars = b.Stars.Count(s => s.CreatedAt >= cutoffDate),
                     RecentForks = b.Forks.Count(f => f.CreatedAt >= cutoffDate),
                     RecentViews = b.Views.Count(v => v.ViewedAt >= cutoffDate),
-                    TotalActivity = b.StarCount + b.ForkCount + (b.ViewCount / 10), // Weight views less heavily
+                    TotalActivity = b.StarCount + b.ForkCount + b.ViewCount / 10, // Weight views less heavily
                     DaysSinceUpdate = EF.Functions.DateDiffDay(b.UpdatedAt, DateTime.UtcNow)
                 })
                 .OrderByDescending(x => 
@@ -745,8 +746,8 @@ namespace Services
             // Check if this user/IP has viewed this block recently (within last hour to prevent spam)
             var recentView = await _context.BlockViews
                 .AnyAsync(v => v.BlockId == blockId && 
-                    ((userId != null && v.UserId == userId) || 
-                     (userId == null && v.IpAddress == ipAddress)) &&
+                    (userId != null && v.UserId == userId || 
+                     userId == null && v.IpAddress == ipAddress) &&
                     v.ViewedAt >= DateTime.UtcNow.AddHours(-1));
 
             if (recentView)

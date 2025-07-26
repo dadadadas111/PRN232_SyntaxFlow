@@ -1,6 +1,6 @@
 using Models;
 
-namespace Services
+namespace Services.Interface
 {
     /// <summary>
     /// Contract for translating Blockly AST to code.

@@ -3,8 +3,9 @@ using System.Text.Json;
 using Models;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using Services.Interface;
 
-namespace Services
+namespace Services.Service
 {
     public class GeminiAiCodeGeneratorService : IAiCodeGeneratorService
     {
@@ -312,7 +313,7 @@ namespace Services
                 targetLanguage, chunkCount, result.Length, hasError);
             
             // If we have no content or only error messages, return a proper error
-            if (string.IsNullOrWhiteSpace(result) || (hasError && result.Trim().StartsWith("// Error:")))
+            if (string.IsNullOrWhiteSpace(result) || hasError && result.Trim().StartsWith("// Error:"))
             {
                 _logger.LogError("Failed to generate valid code for language: {Language}. Result: {Result}", targetLanguage, result);
                 return $"// Error: Failed to generate {targetLanguage} code using AI service";

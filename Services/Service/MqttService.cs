@@ -3,9 +3,10 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Models;
 using MQTTnet;
+using Services.Interface;
 using System.Text.Json;
 
-namespace Services
+namespace Services.Service
 {
     public class MqttService : BackgroundService, IMqttService
     {
@@ -139,7 +140,7 @@ namespace Services
                 var payload = new
                 {
                     action = "create",
-                    comment = comment,
+                    comment,
                     timestamp = DateTime.UtcNow
                 };
 
@@ -181,7 +182,7 @@ namespace Services
                 var payload = new
                 {
                     action = "update",
-                    comment = comment,
+                    comment,
                     timestamp = DateTime.UtcNow
                 };
 
@@ -224,7 +225,7 @@ namespace Services
                 var payload = new
                 {
                     action = "delete",
-                    commentId = commentId,
+                    commentId,
                     timestamp = DateTime.UtcNow
                 };
 

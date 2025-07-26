@@ -1,7 +1,8 @@
+using Services.Interface;
 using System.Net.Mail;
 using System.Threading.Tasks;
 
-namespace Services
+namespace Services.Service
 {
     public class EmailService : IEmailService
     {
