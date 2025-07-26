@@ -15,19 +15,22 @@ namespace API.Controllers
         private readonly PythonCodeTranslator _pythonTranslator;
         private readonly JavaScriptCodeTranslator _jsTranslator;
         private readonly IAiCodeGeneratorService _aiCodeGenerator;
+        private readonly IAiUsageService _aiUsageService;
 
         public TranslateController(
             PythonCodeTranslator pythonTranslator, 
             JavaScriptCodeTranslator jsTranslator,
-            IAiCodeGeneratorService aiCodeGenerator)
+            IAiCodeGeneratorService aiCodeGenerator,
+            IAiUsageService aiUsageService)
         {
             _pythonTranslator = pythonTranslator;
             _jsTranslator = jsTranslator;
             _aiCodeGenerator = aiCodeGenerator;
+            _aiUsageService = aiUsageService;
         }
 
         [HttpPost]
-        public IActionResult Post([FromBody] BlocklyAstDto dto, [FromQuery] string lang = "py")
+        public async Task<IActionResult> Post([FromBody] BlocklyAstDto dto, [FromQuery] string lang = "py")
         {
             if (dto == null)
                 return BadRequest("Invalid Blockly AST");
@@ -41,16 +44,36 @@ namespace API.Controllers
 
             if (translator != null)
             {
-                // Use native translator for supported languages
+                // Use native translator for supported languages (no usage limit)
                 var code = translator.Translate(dto);
                 return Ok(code);
             }
             else
             {
+                // Check AI usage limit for unsupported languages
+                var userId = GetCurrentUserId();
+                if (string.IsNullOrEmpty(userId))
+                {
+                    return Unauthorized("User authentication required for AI translation");
+                }
+
+                if (!await _aiUsageService.TryConsumeAiUsageAsync(userId))
+                {
+                    var usageInfo = await _aiUsageService.GetAiUsageAsync(userId);
+                    return StatusCode(429, new 
+                    { 
+                        message = $"Daily AI translation limit exceeded. You have used {usageInfo.CurrentUsage}/{usageInfo.DailyLimit} translations today. Limit resets at {usageInfo.ResetTime:yyyy-MM-dd HH:mm:ss} UTC.",
+                        currentUsage = usageInfo.CurrentUsage,
+                        dailyLimit = usageInfo.DailyLimit,
+                        remainingUsage = usageInfo.RemainingUsage,
+                        resetTime = usageInfo.ResetTime
+                    });
+                }
+
                 // Use AI for unsupported languages - but return synchronously for this endpoint
                 try
                 {
-                    var aiCode = _aiCodeGenerator.GenerateCodeAsync(dto, lang).Result;
+                    var aiCode = await _aiCodeGenerator.GenerateCodeAsync(dto, lang);
                     return Ok(aiCode);
                 }
                 catch (Exception ex)
@@ -76,10 +99,27 @@ namespace API.Controllers
 
             if (translator != null)
             {
-                // For native translators, return immediately
+                // For native translators, return immediately (no usage limit)
                 var code = translator.Translate(dto);
                 Response.ContentType = "text/plain";
                 await Response.WriteAsync(code);
+                return new EmptyResult();
+            }
+
+            // Check AI usage limit for unsupported languages
+            var userId = GetCurrentUserId();
+            if (string.IsNullOrEmpty(userId))
+            {
+                Response.ContentType = "text/plain";
+                await Response.WriteAsync("// Error: User authentication required for AI translation");
+                return new EmptyResult();
+            }
+
+            if (!await _aiUsageService.TryConsumeAiUsageAsync(userId))
+            {
+                var usageInfo = await _aiUsageService.GetAiUsageAsync(userId);
+                Response.ContentType = "text/plain";
+                await Response.WriteAsync($"// Error: Daily AI translation limit exceeded ({usageInfo.CurrentUsage}/{usageInfo.DailyLimit}). Limit resets at {usageInfo.ResetTime:yyyy-MM-dd HH:mm:ss} UTC.");
                 return new EmptyResult();
             }
 
@@ -102,6 +142,20 @@ namespace API.Controllers
             }
 
             return new EmptyResult();
+        }
+
+        [HttpGet("ai-usage")]
+        [Authorize]
+        public async Task<IActionResult> GetAiUsage()
+        {
+            var userId = GetCurrentUserId();
+            if (string.IsNullOrEmpty(userId))
+            {
+                return Unauthorized();
+            }
+
+            var usageInfo = await _aiUsageService.GetAiUsageAsync(userId);
+            return Ok(usageInfo);
         }
 
         [HttpGet("supported-languages")]
@@ -130,6 +184,11 @@ namespace API.Controllers
             };
 
             return Ok(languages);
+        }
+
+        private string? GetCurrentUserId()
+        {
+            return User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
         }
     }
 }

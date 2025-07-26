@@ -101,6 +101,13 @@
             <span id="editApiStatus" class="ms-3"></span>
         </div>
         
+        <!-- AI Usage Display -->
+        <div id="aiUsageDisplay" class="alert alert-info mb-3" style="display: none;">
+            <i class="bi bi-robot"></i>
+            <span id="aiUsageText">AI Translations: 0/5 used today</span>
+            <small class="d-block text-muted" id="aiUsageReset">Resets at: --</small>
+        </div>
+        
         <div style="position:relative;">
             <pre id="codeDisplay" style="background:#f8f9fa; padding:1em; margin-top:1em; white-space:pre-wrap; word-break:break-all;"></pre>
             <button id="copyCodeBtn" title="Copy code" style="position:absolute;top:10px;right:10px;z-index:2;background:transparent;border:none;">
@@ -328,6 +335,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // Initialize both block loading and comment system
     loadBlock();
     initializeCommentSystem();
+    fetchAiUsage(); // Add AI usage fetching
 });
 
 function loadBlock() {
@@ -639,6 +647,9 @@ function generateCodeWithStreaming(language, json, jwt, langName, statusElement)
     })
     .then(response => {
         if (!response.ok) {
+            if (response.status === 429) {
+                throw new Error("Daily AI translation limit exceeded. Please try again tomorrow.");
+            }
             throw new Error(`HTTP ${response.status}`);
         }
         
@@ -649,10 +660,20 @@ function generateCodeWithStreaming(language, json, jwt, langName, statusElement)
             reader.read().then(({ done, value }) => {
                 if (done) {
                     statusElement.innerHTML = `<span class="text-success"><i class="bi bi-check-circle"></i> ${langName} code generated using AI!</span>`;
+                    fetchAiUsage(); // Refresh AI usage after successful generation
                     return;
                 }
                 
                 const chunk = decoder.decode(value, { stream: true });
+                
+                // Check for usage limit error in stream
+                if (chunk.includes("Daily AI translation limit exceeded")) {
+                    codeDisplay.innerText = chunk;
+                    statusElement.innerHTML = `<span class="text-danger"><i class="bi bi-exclamation-circle"></i> AI usage limit exceeded</span>`;
+                    fetchAiUsage(); // Refresh usage display
+                    return;
+                }
+                
                 codeDisplay.innerText += chunk;
                 
                 // Auto-scroll to bottom
@@ -671,6 +692,9 @@ function generateCodeWithStreaming(language, json, jwt, langName, statusElement)
     .catch(err => {
         console.error('Streaming request error:', err);
         statusElement.innerHTML = `<span class="text-danger"><i class="bi bi-exclamation-circle"></i> ${err.message || "Streaming API error"}</span>`;
+        if (err.message.includes("limit exceeded")) {
+            fetchAiUsage(); // Refresh usage display
+        }
     });
 }
 
@@ -692,7 +716,49 @@ function getLanguageName(code) {
     return languageNames[code] || code.toUpperCase();
 }
 
-// ...existing code...
+// ===== AI USAGE FUNCTIONS =====
+// Function to update AI usage display
+function updateAiUsageDisplay(usageInfo) {
+    const aiUsageDisplay = document.getElementById('aiUsageDisplay');
+    const aiUsageText = document.getElementById('aiUsageText');
+    const aiUsageReset = document.getElementById('aiUsageReset');
+    
+    if (usageInfo) {
+        aiUsageText.textContent = `AI Translations: ${usageInfo.currentUsage}/${usageInfo.dailyLimit} used today`;
+        aiUsageReset.textContent = `Resets at: ${new Date(usageInfo.resetTime).toLocaleString()}`;
+        
+        // Change alert type based on usage
+        aiUsageDisplay.className = 'alert mb-3 ' + (
+            usageInfo.remainingUsage === 0 ? 'alert-danger' :
+            usageInfo.remainingUsage <= 1 ? 'alert-warning' : 'alert-info'
+        );
+        
+        aiUsageDisplay.style.display = 'block';
+    } else {
+        aiUsageDisplay.style.display = 'none';
+    }
+}
+
+// Function to fetch AI usage
+async function fetchAiUsage() {
+    const jwt = localStorage.getItem("token");
+    if (!jwt) return;
+    
+    try {
+        const response = await fetch(apiBaseUrl + "api/translate/ai-usage", {
+            headers: {
+                "Authorization": "Bearer " + jwt
+            }
+        });
+        
+        if (response.ok) {
+            const usageInfo = await response.json();
+            updateAiUsageDisplay(usageInfo);
+        }
+    } catch (error) {
+        console.error('Error fetching AI usage:', error);
+    }
+}
 
 function cancelEdit() {
     if (originalBlockContent) {

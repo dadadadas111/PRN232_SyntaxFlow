@@ -5,6 +5,7 @@ using Microsoft.IdentityModel.Tokens;
 using Models;
 using Services;
 using System.Text;
+using StackExchange.Redis;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -22,6 +23,15 @@ builder.Services.AddScoped<PythonCodeTranslator>();
 builder.Services.AddScoped<JavaScriptCodeTranslator>();
 builder.Services.AddScoped<IAiCodeGeneratorService, GeminiAiCodeGeneratorService>();
 builder.Services.AddHttpClient<GeminiAiCodeGeneratorService>();
+
+// Add Redis connection
+builder.Services.AddSingleton<IConnectionMultiplexer>(provider =>
+{
+    var connectionString = builder.Configuration.GetConnectionString("Redis") ?? "localhost:6379";
+    return ConnectionMultiplexer.Connect(connectionString);
+});
+
+builder.Services.AddScoped<IAiUsageService, AiUsageService>();
 builder.Services.AddScoped<IBlockService, BlockService>();
 builder.Services.AddScoped<ICommentService, CommentService>();
 builder.Services.AddSingleton<IMqttService, MqttService>();
